@@ -179,6 +179,18 @@ impl PetriGraph {
     }
 }
 
+impl<T: IntoIterator, U: IntoIterator<Item=Vec<u8>>> From<T> for PetriGraph
+where
+    T: IntoIterator<Item = (Vec<u8>, U)>,
+{
+    fn from(iter: T) -> Self {
+        let iter = iter.into_iter().map(|(k, n)| (k, n.into_iter().collect()));
+        Self {
+            map: iter.collect(),
+        }
+    }
+}
+
 impl PartialEq for PetriGraph {
     fn eq(&self, other: &Self) -> bool {
         if self.map.len() != other.map.len() {
@@ -411,5 +423,22 @@ mod test {
 
         assert!(a < c);
         assert!(c > a);
+    }
+
+    #[test]
+    fn test_graph_from() {
+        let network = PetriNetwork::new(
+            vec![1, 0],
+            vec![
+                PetriTransition::new(vec![0], vec![1]),
+            ]
+        );
+
+        assert_eq!(network.step(), vec![vec![0, 1]]);
+
+        assert_eq!(network.generate_graph(), PetriGraph::from([
+            (vec![1, 0], [vec![0, 1]]),
+            (vec![0, 1], [vec![0, 1]]),
+        ]));
     }
 }
