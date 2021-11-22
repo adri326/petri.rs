@@ -80,17 +80,13 @@ impl PetriNetwork {
 
         let mut stack = vec![self.nodes.clone()];
         while let Some(current_node) = stack.pop() {
-            for next_state in self.recurse(0, current_node.clone(), current_node.clone()) {
-                if let Some(ref mut node) = map.get_mut(&next_state) {
-                    // Entry in graph already exists, add the next state (does nothing if the hashset already has it)
-                    node.insert(next_state);
-                } else {
-                    // Entry in graph doesn't already exist, add it with `next_state` as only value
+            if map.get(&current_node).is_none() {
+                let mut hashset = HashSet::new();
+                for next_state in self.recurse(0, current_node.clone(), current_node.clone()) {
                     stack.push(next_state.clone());
-                    let mut hashset = HashSet::new();
                     hashset.insert(next_state);
-                    map.insert(current_node.clone(), hashset);
                 }
+                map.insert(current_node.clone(), hashset);
             }
         }
 
@@ -600,5 +596,39 @@ mod test {
                 assert_eq!(reaches_c, a == 1 && b == 1); // reaches_c <=> (A, B) = (1, 1)
             }
         }
+    }
+
+    #[test]
+    fn test_step_fork() {
+        let mut network = PetriNetwork::new(
+            vec![0; 4],
+            vec![
+                PetriTransition::new(vec![0], vec![1]),
+                PetriTransition::new(vec![1], vec![2]),
+                PetriTransition::new(vec![1], vec![3]),
+            ]
+        );
+
+        test_recurse(&network, vec![vec![0; 4]]);
+
+        network.set_node(0, 1);
+
+        test_recurse(&network, vec![vec![0, 1, 0, 0]]);
+
+        network.set_node(0, 0);
+        network.set_node(1, 1);
+
+        test_recurse(&network, vec![vec![0, 0, 1, 0], vec![0, 0, 0, 1]]);
+
+        network.set_node(1, 0);
+        network.set_node(0, 1);
+        let graph = network.generate_graph();
+
+        assert_eq!(graph, PetriGraph::from([
+            (vec![1, 0, 0, 0], vec![vec![0, 1, 0, 0]]),
+            (vec![0, 1, 0, 0], vec![vec![0, 0, 1, 0], vec![0, 0, 0, 1]]),
+            (vec![0, 0, 1, 0], vec![vec![0, 0, 1, 0]]),
+            (vec![0, 0, 0, 1], vec![vec![0, 0, 0, 1]]),
+        ]));
     }
 }
