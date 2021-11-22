@@ -6,3 +6,9 @@ pub use network::{
     PetriNetwork,
     PetriTransition,
 };
+
+pub mod builder;
+pub use builder::{
+    PetriBuilder,
+    PetriTransitionBuilder
+};

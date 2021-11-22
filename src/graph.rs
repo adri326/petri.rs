@@ -201,6 +201,44 @@ impl PetriGraph {
             panic!("Assertion error: expected all nodes of graph to reach the given node(s).");
         }
     }
+
+    pub fn forall<'b, F>(&'b self, condition: F) -> bool
+    where
+        F: for<'c> Fn(&'c Vec<u8>) -> bool + Copy
+    {
+        for (node, _) in self.map.iter() {
+            if !(condition)(node) {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    pub fn assert_forall<'b, F>(&'b self, condition: F)
+    where
+        F: for<'c> Fn(&'c Vec<u8>) -> bool + Copy
+    {
+        let mut errors = HashSet::new();
+
+        for (node, _) in self.map.iter() {
+            if !(condition)(node) {
+                errors.insert(node);
+            }
+        }
+
+        if errors.len() > 0 {
+            eprintln!("Info: Nodes analyzed: (- yielded false, + yielded true)");
+            for (node, _) in self.map.iter() {
+                if errors.contains(node) {
+                    eprintln!(" - {:?}", node);
+                } else {
+                    eprintln!(" + {:?}", node);
+                }
+            }
+            panic!("Assertion error: not every node fulfills the condition");
+        }
+    }
 }
 
 impl<T: IntoIterator<Item=Vec<u8>>, const N: usize> From<[(Vec<u8>, T); N]> for PetriGraph {
