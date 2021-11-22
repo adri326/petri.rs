@@ -1,5 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::cmp::Ordering;
+use std::cell::RefCell;
+use std::borrow::Cow;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PetriTransition {
@@ -16,6 +18,7 @@ pub struct PetriNetwork {
 #[derive(Clone, Debug)]
 pub struct PetriGraph {
     map: HashMap<Vec<u8>, HashSet<Vec<u8>>>,
+    transpose: RefCell<Option<HashMap<Vec<u8>, HashSet<Vec<u8>>>>>,
 }
 
 impl PetriTransition {
@@ -51,6 +54,13 @@ impl PetriNetwork {
             nodes,
             transitions
         }
+    }
+
+    pub fn set_node(&mut self, index: usize, value: u8) {
+        while self.nodes.len() <= index {
+            self.nodes.push(0);
+        }
+        self.nodes[index] = value;
     }
 
     pub fn step(&self) -> Vec<Vec<u8>> {
@@ -92,7 +102,8 @@ impl PetriNetwork {
         map.shrink_to_fit();
 
         PetriGraph {
-            map
+            map,
+            transpose: RefCell::new(None),
         }
     }
 
@@ -144,11 +155,25 @@ impl PetriNetwork {
     }
 }
 
+/// A graph of states of a petri network. The following notation is used in this document:
+/// - `node ∈ G`, iff `node` is a state reached by the petri network while generating the graph `G`
+/// - `node_a -> node_b [G]`, iff `node_a` transitions to `node_b` within the network as the graph `G` was generated.
+///    We will omit the `[G]` indication when there is only one G
+/// - `node_a ⊂ node_b [G]`, iff `∀ next ∈ G`, `(node_a -> next [G]) => (node_b -> next [G])`
+/// - `node ⊂ B[node] [A]` iff `node ∈ A`, `node ∈ B` and `∀ next ∈ A`, `(node -> next [A]) => (node -> next [B])`
+/// - `G = A ∪ B` is the smallest graph such that `∀ node ∈ A, node ⊂ C[node]`, `∀ node ∈ B, node ⊂ C[node]` and `∀ node ∈ C, node ∈ A or node ∈ B`
+/// - `G = A ∩ B` is the greatest graph such that `∀ node ∈ C, node ∈ A and node ∈ B` and `∀ node ∈ C, node ⊂ A[node] and node ⊂ B[node]`
+/// - `node_a ->> node_b [G]` if `∃ k_n ∈ ℕ→G, N ∈ ℕ` such that `∀ n < N, k_n -> k_n+1 [G]`, `k_0 = node_a` and `k_N = node_b`.
+///    In other words, there exists a path from `node_a` to `node_b`.
 impl PetriGraph {
     pub fn get<'b>(&'b self, state: &Vec<u8>) -> Option<&'b HashSet<Vec<u8>>> {
         self.map.get(state)
     }
 
+    /// Returns the union graph of `self` and `other`, where if `res = self ∪ other`,
+    /// `∀ node ∈ self, node ⊂ res[node]` and `∀ node ∈ other, node ⊂ res[node]`
+    ///
+    /// We thus have the relations `self ⊂ res` and `other ⊂ res`.
     pub fn union<'b>(&'b self, other: Self) -> Self {
         let mut map = HashMap::with_capacity(self.map.len() + other.map.len());
 
@@ -174,8 +199,82 @@ impl PetriGraph {
         map.shrink_to_fit();
 
         Self {
-            map
+            map,
+            transpose: RefCell::new(None), // TODO: formally prove that `G = A ∪ B => G^T = A^T ∪ B^T`
         }
+    }
+
+    pub fn calculate_transpose(&self) {
+        if self.transpose.borrow().is_none() {
+            let mut res: HashMap<Vec<u8>, HashSet<Vec<u8>>> = HashMap::new();
+
+            for (node, next_states) in self.map.iter() {
+                for next_state in next_states.iter() {
+                    match res.get_mut(next_state) {
+                        Some(ref mut hashset) => {
+                            hashset.insert(node.clone());
+                        }
+                        None => {
+                            res.insert(next_state.clone(), [node.clone()].into());
+                        }
+                    }
+                }
+            }
+
+            *self.transpose.borrow_mut() = Some(res);
+        }
+    }
+
+    /// Returns the greatest set `S ⊂ self` such that `∀ node ∈ S`, `∃ state ∈ self` such that `condition(state)` and `node ->> state`
+    pub fn reaches<'b, F>(&'b self, condition: F) -> HashSet<Cow<'b, Vec<u8>>>
+    where
+        F: for<'c> Fn(&'c Vec<u8>) -> bool
+    {
+        let mut hash_set = HashSet::with_capacity(self.map.len());
+        let mut stack = Vec::new();
+        let mut condition_always_true = true;
+
+        for (node, _) in self.map.iter() {
+            if (condition)(node) {
+                hash_set.insert(Cow::Borrowed(node));
+                stack.push(node);
+            } else {
+                condition_always_true = false;
+            }
+        }
+
+        if condition_always_true {
+            return hash_set;
+        }
+
+        self.calculate_transpose();
+
+        if let Ok(ref transpose) = self.transpose.try_borrow() {
+            let transpose = transpose.as_ref().expect("PetriGraph::calculate_transpose did not set PetriGraph::transpose to Some(...)");
+            while let Some(current_node) = stack.pop() {
+                for antecedent in transpose.get(current_node).iter().map(|x| x.iter()).flatten() {
+                    if !hash_set.contains(antecedent) {
+                        hash_set.insert(Cow::Owned(antecedent.clone()));
+                        stack.push(antecedent);
+                    }
+                }
+            }
+        } else {
+            panic!("Couldn't borrow() PetriGraph::tranpose");
+        }
+
+        hash_set
+    }
+
+    /// Returns true if `∀ node ∈ self`, `∃ state ∈ self` such that `condition(state)` and `node ->> state`
+    pub fn always_reaches<'b, F>(&'b self, condition: F) -> bool
+    where
+        F: for<'c> Fn(&'c Vec<u8>) -> bool
+    {
+        let actual = self.reaches(condition);
+        let expected = self.map.iter().map(|(k, _)| Cow::Borrowed(k)).collect::<HashSet<_>>();
+
+        actual == expected
     }
 }
 
@@ -187,6 +286,7 @@ where
         let iter = iter.into_iter().map(|(k, n)| (k, n.into_iter().collect()));
         Self {
             map: iter.collect(),
+            transpose: RefCell::new(None),
         }
     }
 }
@@ -373,6 +473,7 @@ mod test {
 
         let mut expected = PetriGraph {
             map: HashMap::new(),
+            transpose: RefCell::new(None),
         };
         expected.map.insert(vec![1, 0], [vec![0, 1]].into());
         expected.map.insert(vec![0, 1], [vec![0, 1]].into()); // Identity
@@ -440,5 +541,64 @@ mod test {
             (vec![1, 0], [vec![0, 1]]),
             (vec![0, 1], [vec![0, 1]]),
         ]));
+    }
+
+    #[test]
+    fn test_graph_transpose() {
+        let network = PetriNetwork::new(
+            vec![1, 1, 0, 0, 0, 0],
+            vec![
+                PetriTransition::new(vec![0], vec![2]),
+                PetriTransition::new(vec![1], vec![3]),
+                PetriTransition::new(vec![3], vec![4]),
+                PetriTransition::new(vec![2, 4], vec![5]),
+            ]
+        );
+
+        let graph = network.generate_graph();
+
+        let mut graph_transpose = network.generate_graph();
+        graph_transpose.calculate_transpose();
+
+        assert!(graph_transpose.transpose.borrow().is_some()); // G^T was filled in
+
+        graph_transpose.map = graph_transpose.transpose.borrow().as_ref().unwrap().clone();
+        *graph_transpose.transpose.borrow_mut() = None;
+
+        graph_transpose.calculate_transpose();
+
+        let graph_double_transpose = PetriGraph {
+            map: graph_transpose.transpose.borrow().as_ref().unwrap().clone(),
+            transpose: RefCell::new(None),
+        };
+
+        assert_eq!(graph, graph_double_transpose); // G^T^T = G
+    }
+
+    #[test]
+    fn test_graph_always_reaches() {
+        let mut network = PetriNetwork::new(
+            vec![1, 1, 0, 0, 0, 0],
+            vec![
+                PetriTransition::new(vec![0], vec![2]),
+                PetriTransition::new(vec![1], vec![3]),
+                PetriTransition::new(vec![3], vec![4]),
+                PetriTransition::new(vec![2, 4], vec![5]),
+            ]
+        );
+
+        let graph = network.generate_graph();
+
+        assert!(graph.always_reaches(|state| state[5] == 1));
+
+        for a in 0..=1 {
+            for b in 0..=1 {
+                network.set_node(0, a);
+                network.set_node(1, b);
+                let graph = network.generate_graph();
+                let reaches_c = graph.always_reaches(|state| state[5] == 1); // reaches_c = [A, B, 0, 0, 0, 0] ->> [0, 0, 0, 0, 0, 1]
+                assert_eq!(reaches_c, a == 1 && b == 1); // reaches_c <=> (A, B) = (1, 1)
+            }
+        }
     }
 }
