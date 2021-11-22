@@ -272,6 +272,47 @@ impl PetriGraph {
 
         actual == expected
     }
+
+    /// Does the same as `assert!(graph.always_reaches(condition))`, but prints a more helpful error if the assertion fails.
+    pub fn assert_always_reaches<'b, F>(&'b self, condition: F)
+    where
+        F: for<'c> Fn(&'c Vec<u8>) -> bool + Copy
+    {
+        let actual = self.reaches(condition);
+        let expected = self.map.iter().map(|(k, _)| Cow::Borrowed(k)).collect::<HashSet<_>>();
+
+        if actual != expected {
+            let expected = expected.iter().map(|cow| cow.as_ref()).collect::<HashSet<_>>();
+            let actual = actual.iter().map(|cow| cow.as_ref()).collect::<HashSet<_>>();
+            let base = self.map.iter().map(|(k, _)| k).filter(|k| (condition)(k)).collect::<HashSet<_>>();
+
+            eprintln!("Info: Expected set of nodes:");
+            for node in expected.iter() {
+                eprintln!(" - {:?}", node);
+            }
+            eprintln!("Info: Actual set of nodes:");
+            for node in actual.iter() {
+                eprintln!(" - {:?}", node);
+            }
+            eprintln!("Info: Set of nodes for which the condition is true:");
+            for node in base.iter() {
+                eprintln!(" - {:?}", node);
+            }
+            eprintln!("Info: Set difference (- is missing, * is reaching, ^ is base):");
+            for node in expected.iter() {
+                if actual.contains(node) {
+                    if base.contains(node) {
+                        eprintln!(" ^ {:?}", node);
+                    } else {
+                        eprintln!(" * {:?}", node);
+                    }
+                } else {
+                    eprintln!(" - {:?}", node);
+                }
+            }
+            panic!("Assertion error: expected all nodes of graph to reach the given node(s).");
+        }
+    }
 }
 
 impl<T: IntoIterator, U: IntoIterator<Item=Vec<u8>>> From<T> for PetriGraph
@@ -585,7 +626,7 @@ mod test {
 
         let graph = network.generate_graph();
 
-        assert!(graph.always_reaches(|state| state[5] == 1));
+        graph.assert_always_reaches(|state| state[5] == 1);
 
         for a in 0..=1 {
             for b in 0..=1 {
