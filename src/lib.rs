@@ -72,17 +72,52 @@ impl PetriNetwork {
             nodes.push(0);
         }
 
-        self.recurse(0, nodes.clone(), nodes)
+        let res = self.recurse(0, nodes.clone(), nodes, &self.get_order());
+
+        if cfg!(feature = "conflict_fast") {
+            res
+        } else {
+            res.into_iter().collect::<HashSet<_>>().into_iter().collect::<Vec<_>>()
+        }
+    }
+
+    fn get_order(&self) -> Vec<usize> {
+        if cfg!(feature = "conflict_normal") {
+            let mut order = (0..self.nodes.len()).collect::<Vec<_>>();
+            let mut weights = vec![0usize; self.nodes.len()];
+            for transition in self.transitions.iter() {
+                for input in transition.inputs.iter() {
+                    weights[*input] += 1;
+                }
+            }
+
+            order.sort_unstable_by_key(|&i| weights[i]);
+            order.reverse();
+
+            order
+        } else {
+            (0..self.nodes.len()).collect::<Vec<_>>()
+        }
     }
 
     pub fn generate_graph(&self) -> PetriGraph {
         let mut map: HashMap<Vec<u8>, HashSet<Vec<u8>>> = HashMap::new();
+        let order = self.get_order();
 
         let mut stack = vec![self.nodes.clone()];
         while let Some(current_node) = stack.pop() {
             if map.get(&current_node).is_none() {
                 let mut hashset = HashSet::new();
-                for next_state in self.recurse(0, current_node.clone(), current_node.clone()) {
+
+                let next_states = self.recurse(0, current_node.clone(), current_node.clone(), &order);
+
+                let next_states = if cfg!(feature = "conflict_fast") {
+                    next_states
+                } else {
+                    next_states.into_iter().collect::<HashSet<_>>().into_iter().collect::<Vec<_>>()
+                };
+
+                for next_state in next_states {
                     stack.push(next_state.clone());
                     hashset.insert(next_state);
                 }
@@ -117,8 +152,8 @@ impl PetriNetwork {
         max
     }
 
-    fn recurse(&self, mut index: usize, state_in: Vec<u8>, state_out: Vec<u8>) -> Vec<Vec<u8>> {
-        while state_out.get(index) == Some(&0) {
+    fn recurse(&self, mut index: usize, state_in: Vec<u8>, state_out: Vec<u8>, order: &[usize]) -> Vec<Vec<u8>> {
+        while index < self.nodes.len() && state_out[order[index]] == 0 {
             index += 1;
         }
         if index >= self.nodes.len() {
@@ -127,13 +162,27 @@ impl PetriNetwork {
 
         let mut transition_candidates = Vec::new();
         for (n, transition) in self.transitions.iter().enumerate() {
-            if transition.inputs.iter().any(|x| *x == index) && transition.is_active(&state_in) {
+            let is_relevant = if cfg!(any(feature = "conflict_fast", feature = "conflict_normal")) {
+                transition.inputs.iter().any(|x| *x == order[index])
+            } else {
+                true
+            };
+
+            if is_relevant && transition.is_active(&state_in) {
                 transition_candidates.push(n);
             }
         }
 
         if transition_candidates.len() == 0 {
-            return self.recurse(index + 1, state_in, state_out);
+            return self.recurse(index + 1, state_in, state_out, order);
+        }
+
+        if cfg!(not(any(
+            feature = "conflict_fast",
+            feature = "conflict_normal",
+            feature = "conflict_slow"
+        ))) && transition_candidates.len() > 1{
+            panic!("Conflict found in network while no conflict strategy was chosen!");
         }
 
         let mut res = Vec::new();
@@ -144,7 +193,7 @@ impl PetriNetwork {
 
             self.transitions[transition].apply(&mut new_state_in, &mut new_state_out);
 
-            res.append(&mut self.recurse(index + 1, new_state_in, new_state_out));
+            res.append(&mut self.recurse(index + 1, new_state_in, new_state_out, order));
         }
 
         res
@@ -411,7 +460,15 @@ mod test {
     use super::*;
 
     fn test_recurse(network: &PetriNetwork, expected: Vec<Vec<u8>>) {
-        assert_eq!(network.recurse(0, network.nodes.clone(), network.nodes.clone()), expected);
+        assert_eq!(
+            network.recurse(
+                0,
+                network.nodes.clone(),
+                network.nodes.clone(),
+                &network.get_order()
+            ).into_iter().collect::<HashSet<_>>(),
+            expected.into_iter().collect::<HashSet<_>>()
+        );
     }
 
     #[test]
@@ -493,6 +550,30 @@ mod test {
         network.nodes[0] = 1;
         network.nodes[1] = 0;
         test_recurse(&network, vec![vec![1, 0, 0]]);
+    }
+
+    #[test]
+    #[cfg(any(feature = "conflict_normal", feature = "conflict_slow"))]
+    fn test_recurse_conflict() {
+        let mut network = PetriNetwork {
+            nodes: vec![1, 1, 1, 0],
+            transitions: vec![
+                PetriTransition::new(vec![0, 1], vec![3]),
+                PetriTransition::new(vec![1, 2], vec![3]),
+            ]
+        };
+
+        test_recurse(&network, vec![
+            vec![0, 0, 1, 1],
+            vec![1, 0, 0, 1],
+        ]);
+
+        network.transitions.reverse();
+
+        test_recurse(&network, vec![
+            vec![0, 0, 1, 1],
+            vec![1, 0, 0, 1],
+        ]);
     }
 
     #[test]

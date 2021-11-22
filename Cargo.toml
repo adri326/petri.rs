@@ -7,3 +7,9 @@ edition = "2021"
 
 [dependencies]
 resvg = "0.19"
+
+[features]
+default = ["conflict_fast"]
+conflict_fast = []
+conflict_normal = []
+conflict_slow = []
