@@ -8,7 +8,7 @@ use std::borrow::Cow;
 //     PetriNetwork,
 // };
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct PetriGraph {
     map: HashMap<Vec<u8>, HashSet<Vec<u8>>>,
     transpose: RefCell<Option<HashMap<Vec<u8>, HashSet<Vec<u8>>>>>,
@@ -362,6 +362,27 @@ impl<'a> IntoIterator for &'a PetriGraph {
 
     fn into_iter(self) -> Self::IntoIter {
         self.map.iter()
+    }
+}
+
+impl std::fmt::Debug for PetriGraph {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "PetriGraph {{")?;
+        for (node, next_states) in self.map.iter() {
+            write!(f, "  {:?} => ", node)?;
+            if next_states.len() == 0 {
+                writeln!(f, "{{}},")?;
+            } else if next_states.len() == 1 {
+                writeln!(f, "{{{:?}}},", next_states.iter().next().unwrap())?;
+            } else {
+                writeln!(f, "{{")?;
+                for next_state in next_states {
+                    writeln!(f, "    {:?},", next_state)?;
+                }
+                writeln!(f, "  }},")?;
+            }
+        }
+        writeln!(f, "}}")
     }
 }
 
