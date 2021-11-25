@@ -80,6 +80,14 @@ impl PetriNetwork {
         }
     }
 
+    pub fn nodes(&self) -> &Vec<u8> {
+        &self.nodes
+    }
+
+    pub fn transitions(&self) -> &Vec<PetriTransition> {
+        &self.transitions
+    }
+
     pub fn get_transition<'b>(&'b self, index: usize) -> Option<&'b PetriTransition> {
         self.transitions.get(index)
     }

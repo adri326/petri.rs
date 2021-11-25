@@ -1,6 +1,6 @@
 #![feature(linked_list_cursors)]
 
-use petri::{
+use petri_network::{
     PetriNetwork,
     PetriTransition,
 };
@@ -15,7 +15,7 @@ pub struct PetriRenderer<'a> {
 impl<'a> From<&'a PetriNetwork> for PetriRenderer<'a> {
     fn from(network: &'a PetriNetwork) -> PetriRenderer<'a> {
         Self {
-            nodes_y: vec![None; network.nodes.len()],
+            nodes_y: vec![None; network.nodes().len()],
             network,
         }
     }
@@ -28,13 +28,13 @@ impl<'a> PetriRenderer<'a> {
         self.nodes_y[seed] = Some(0);
 
         let mut iteration = 0;
-        let mut transitions = LinkedList::from_iter(self.network.transitions.iter());
+        let mut transitions = LinkedList::from_iter(self.network.transitions().iter());
 
         // Simple implementation that works on small to medium-sized networks
         // TODO: more efficient version for bigger networks
         while self.nodes_y.iter().any(|x| x.is_none()) {
             iteration += 1;
-            if iteration > self.network.nodes.len() {
+            if iteration > self.network.nodes().len() {
                 break;
             }
 
@@ -98,7 +98,7 @@ impl<'a> PetriRenderer<'a> {
     }
 
     pub fn optimize_nodes_y(&mut self) {
-        let mut nodes_y = vec![None; self.network.nodes.len()];
+        let mut nodes_y = vec![None; self.network.nodes().len()];
         std::mem::swap(&mut self.nodes_y, &mut nodes_y);
 
         for (index, node) in self.nodes_y.iter_mut().enumerate() {
@@ -106,7 +106,7 @@ impl<'a> PetriRenderer<'a> {
             let mut outputs = Vec::new();
 
             // Accumulate the y-values of the nodes that are connected to the current node
-            for transition in self.network.transitions.iter() {
+            for transition in self.network.transitions().iter() {
                 if !transition.involves(index) {
                     continue;
                 }
@@ -193,7 +193,7 @@ impl<'a> PetriRenderer<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::*;
+    use petri_network::*;
 
     #[test]
     fn test_nodes_y() {
@@ -234,6 +234,6 @@ mod test {
             }
         }
 
-        panic!();
+        // panic!();
     }
 }

@@ -1,15 +1,6 @@
-[package]
-name = "petri"
-version = "0.1.0"
-edition = "2021"
+[workspace]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-resvg = "0.19"
-
-[features]
-default = ["conflict_fast"]
-conflict_fast = []
-conflict_normal = []
-conflict_slow = []
+members = [
+    "network",
+    "render"
+]

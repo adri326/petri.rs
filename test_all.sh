@@ -1,3 +1,3 @@
-cargo test --no-default-features --features=conflict_fast &&
-cargo test --no-default-features --features=conflict_normal &&
-cargo test --no-default-features --features=conflict_slow
+cargo test --features=conflict_fast &&
+cargo test --features=conflict_normal &&
+cargo test --features=conflict_slow

@@ -1,0 +1,15 @@
+[package]
+name = "petri_network"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR GPL-3.0-or-later"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+[features]
+default = []
+conflict_fast = []
+conflict_normal = []
+conflict_slow = []
