@@ -21,6 +21,23 @@ impl PetriTransition {
         }
     }
 
+    #[inline]
+    pub fn involves(&self, node: usize) -> bool {
+        for input in self.inputs.iter() {
+            if *input == node {
+                return true;
+            }
+        }
+
+        for output in self.outputs.iter() {
+            if *output == node {
+                return true;
+            }
+        }
+
+        false
+    }
+
     fn is_active(&self, nodes: &Vec<u8>) -> bool {
         let mut active = true;
         for &input in self.inputs.iter() {
