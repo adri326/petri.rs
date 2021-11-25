@@ -6,4 +6,4 @@ license = "GPL-3.0-or-later"
 
 [dependencies]
 resvg = "0.19"
-petri_network = { path = "../network" }
+petri_network = { path = ".." }
