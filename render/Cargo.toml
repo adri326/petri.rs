@@ -6,4 +6,5 @@ license = "GPL-3.0-or-later"
 
 [dependencies]
 resvg = "0.19"
+rand = "0.8.4"
 petri_network = { path = ".." }

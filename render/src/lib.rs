@@ -1,21 +1,26 @@
 #![feature(linked_list_cursors)]
 
+const EPSILON: f32 = 0.00001;
+
 use petri_network::{
     PetriNetwork,
     PetriTransition,
 };
+use rand::prelude::*;
 use std::collections::{HashSet, LinkedList};
 
 #[derive(Clone, Debug)]
 pub struct PetriRenderer<'a> {
     pub network: &'a PetriNetwork,
     pub nodes_y: Vec<Option<i32>>,
+    pub nodes_x: Vec<f32>,
 }
 
 impl<'a> From<&'a PetriNetwork> for PetriRenderer<'a> {
     fn from(network: &'a PetriNetwork) -> PetriRenderer<'a> {
         Self {
             nodes_y: vec![None; network.nodes().len()],
+            nodes_x: (0..network.nodes().len()).map(|x| x as f32).collect(),
             network,
         }
     }
@@ -174,8 +179,110 @@ impl<'a> PetriRenderer<'a> {
             }
         }
     }
+
+    pub fn randomize_nodes_x(&mut self) {
+        let mut rng = rand::thread_rng();
+        self.nodes_x = (0..self.nodes_x.len()).map(|x| x as f32).collect();
+        self.nodes_x.shuffle(&mut rng);
+    }
+
+    pub fn optimize_nodes_x(&mut self, attempts: usize, rounds: usize, step_size: f32) {
+        if attempts > 0 {
+            self.randomize_nodes_x();
+        }
+        for _ in 0..rounds {
+            self.optimize_nodes_x_step(step_size);
+        }
+        if attempts > 1 {
+            let mut best_attempt = (self.nodes_x.clone(), self.cost_x_all());
+
+            for _attempt in 1..attempts {
+                self.randomize_nodes_x();
+                for _round in 0..rounds {
+                    self.optimize_nodes_x_step(step_size);
+                }
+                let cost = self.cost_x_all();
+                if cost < best_attempt.1 {
+                    std::mem::swap(&mut best_attempt.0, &mut self.nodes_x);
+                }
+            }
+
+            std::mem::swap(&mut best_attempt.0, &mut self.nodes_x);
+        }
+    }
+
+    fn optimize_nodes_x_step(&mut self, step_size: f32) {
+        let mut nodes_x = self.nodes_x.clone();
+        for (index, current_x) in nodes_x.iter_mut().enumerate() {
+            // ∂/∂x cost_x(index) ~= (cost_x(index, x+ε) - cost_x(index, x-ε)) / 2ε
+            let dx = (self.cost_x(index, *current_x + EPSILON) - self.cost_x(index, *current_x - EPSILON)) / (2.0 * EPSILON);
+
+            // Gradient descent to find the minimum
+            *current_x -= step_size * sigma(dx);
+        }
+
+        std::mem::swap(&mut nodes_x, &mut self.nodes_x);
+    }
+
+    fn cost_x(&self, index: usize, x: f32) -> f32 {
+        let mut sum = 0.0;
+
+        // Sum the distance to the current node within the transitions (closer transitions have a higher weight)
+        for transition in self.network.transitions().iter() {
+            if transition.involves(index) {
+                for &input in transition.inputs.iter() {
+                    let delta_y = self.nodes_y[input].map(|input_y| self.nodes_y[index].map(|y| input_y - y)).flatten().unwrap_or(0);
+                    let mult = if delta_y.abs() > 1 { 0.25 } else { 1.0 };
+                    sum += mult * (self.nodes_x[input] - x) * (self.nodes_x[input] - x);
+                }
+
+                for &output in transition.outputs.iter() {
+                    let delta_y = self.nodes_y[output].map(|output_y| self.nodes_y[index].map(|y| output_y - y)).flatten().unwrap_or(0);
+                    let mult = if delta_y.abs() > 1 { 0.25 } else { 1.0 };
+                    sum += mult * (self.nodes_x[output] - x) * (self.nodes_x[output] - x);
+                }
+            }
+        }
+
+        let mut sum = sum.sqrt();
+
+        // For every node that is on the same row as ourselves, sum a lennard-jones-like function
+        for (i, node) in self.nodes_x.iter().enumerate() {
+            if i == index || self.nodes_y[i] != self.nodes_y[index] {
+                continue;
+            }
+
+            let d = 1.2;
+            let r = (node - x).abs();
+            let dr6 = (d / (r + EPSILON)).powi(6);
+            let mult = 16.0;
+            sum += mult * (dr6 * dr6 - dr6);
+        }
+
+        sum
+    }
+
+    fn cost_x_all(&self) -> f32 {
+        let mut sum = 0.0;
+
+        for (i, x) in self.nodes_x.iter().enumerate() {
+            let cost = self.cost_x(i, *x);
+            sum += cost * cost;
+        }
+
+        sum
+    }
+
+    pub fn discretize_x(&mut self, radix: f32) {
+        for x in self.nodes_x.iter_mut() {
+            *x = (*x / radix).round() * radix;
+        }
+    }
 }
 
+fn sigma(x: f32) -> f32 {
+    2.0 / (1.0 + (-x).exp()) - 1.0
+}
 
 #[cfg(test)]
 mod test {
@@ -218,6 +325,22 @@ mod test {
             for y in renderer.nodes_y.iter() {
                 assert!(y.is_some());
             }
+        }
+
+        renderer.randomize_nodes_x();
+        renderer.optimize_nodes_x(1, 1, 0.01);
+        for x in renderer.nodes_x.iter() {
+            assert!(!x.is_nan() && !x.is_infinite());
+        }
+        renderer.optimize_nodes_x(100, 100, 0.01);
+        for x in renderer.nodes_x.iter() {
+            assert!(!x.is_nan() && !x.is_infinite());
+        }
+        renderer.optimize_nodes_x(0, 1000, 0.01);
+        renderer.discretize_x(0.25);
+        for (_i, x) in renderer.nodes_x.iter().enumerate() {
+            assert!(!x.is_nan() && !x.is_infinite());
+            println!("{}: ({}, {})", _i, x, renderer.nodes_y[_i].unwrap());
         }
     }
 }
