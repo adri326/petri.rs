@@ -1,6 +1,9 @@
 use std::collections::{HashMap, HashSet};
 use crate::graph::PetriGraph;
 
+#[cfg(feature = "export_dot")]
+mod export_dot;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PetriTransition {
     pub inputs: Vec<usize>,
@@ -227,6 +230,23 @@ impl PetriNetwork {
         }
 
         res
+    }
+
+    #[cfg(feature = "export_dot")]
+    pub fn export_dot<W: std::io::Write>(&self, writer: &mut W) {
+        let mut writer = dot_writer::DotWriter::from(writer);
+
+        export_dot::export_network(self, &mut writer);
+    }
+
+    #[cfg(feature = "export_dot")]
+    pub fn get_dot_string(&self) -> String {
+        let mut vec = Vec::new();
+        let mut writer = dot_writer::DotWriter::from(&mut vec);
+
+        export_dot::export_network(self, &mut writer);
+
+        String::from_utf8_lossy(&vec).into_owned()
     }
 }
 

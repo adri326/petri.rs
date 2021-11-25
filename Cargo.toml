@@ -8,12 +8,15 @@ readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+dot-writer = { version = "0.1.2", optional = true }
 
 [features]
 default = []
 conflict_fast = []
 conflict_normal = []
 conflict_slow = []
+
+export_dot = ["dot-writer"]
 
 [lib]
 path = "network/src/lib.rs"
@@ -22,3 +25,7 @@ path = "network/src/lib.rs"
 members = [
     "render"
 ]
+
+[[example]]
+name = "export_dot"
+required-features = ["export_dot"]
