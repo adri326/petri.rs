@@ -4,7 +4,7 @@ use petri_network::{
     PetriNetwork,
     PetriTransition,
 };
-use std::collections::{VecDeque, HashSet, LinkedList};
+use std::collections::{HashSet, LinkedList};
 
 #[derive(Clone, Debug)]
 pub struct PetriRenderer<'a> {
@@ -76,7 +76,6 @@ impl<'a> PetriRenderer<'a> {
                     for &input in transition.inputs.iter() {
                         if !encountered.contains(&input) {
                             self.nodes_y[input] = Some(output_min - 1);
-                            println!("{}", input);
                             encountered.insert(input);
                         }
                     }
@@ -86,7 +85,6 @@ impl<'a> PetriRenderer<'a> {
                     for &output in transition.outputs.iter() {
                         if !encountered.contains(&output) {
                             self.nodes_y[output] = Some(input_max + 1);
-                            println!("{}", output);
                             encountered.insert(output);
                         }
                     }
@@ -111,15 +109,13 @@ impl<'a> PetriRenderer<'a> {
                     continue;
                 }
 
-                let mut is_input = transition.inputs.iter().any(|x| *x == index);
-                let mut is_output = transition.outputs.iter().any(|x| *x == index);
+                let is_input = transition.inputs.iter().any(|x| *x == index);
+                let is_output = transition.outputs.iter().any(|x| *x == index);
 
                 if is_output {
                     for &input in transition.inputs.iter() {
                         if input != index {
                             inputs.push(nodes_y[input].unwrap_or(0));
-                        } else {
-                            is_input = true;
                         }
                     }
                 }
@@ -128,8 +124,6 @@ impl<'a> PetriRenderer<'a> {
                     for &output in transition.outputs.iter() {
                         if output != index {
                             outputs.push(nodes_y[output].unwrap_or(0));
-                        } else {
-                            is_output = true;
                         }
                     }
                 }
@@ -161,31 +155,24 @@ impl<'a> PetriRenderer<'a> {
                     let output_min = outputs.iter().reduce(|acc, act| acc.min(act)).unwrap();
                     *node = Some(output_min - 1);
                 }
-                println!("{:?}, {:?}, {:?}, {:?}", inputs, outputs, nodes_y[index], node);
             }
         }
 
-        let mut y_min = 0;
-        let mut y_max = 0;
-        for y in self.nodes_y.iter() {
-            if let Some(y) = y {
-                y_min = y_min.min(*y);
-                y_max = y_max.max(*y);
-            }
-        }
+        // Remove gaps
+        let mut y_last = i32::MIN;
+        let mut y_current = -1;
+        let mut nodes_y = self.nodes_y.iter_mut().collect::<Vec<_>>();
+        nodes_y.sort_by_key(|x| (**x).unwrap_or(0));
 
-        println!("Positions: ");
-        println!("===");
-        for y in y_min..=y_max {
-            print!("{} - ", y);
-            for (index, node) in self.nodes_y.iter().enumerate() {
-                if *node == Some(y) {
-                    print!("{}  ", index);
+        for y in nodes_y.into_iter() {
+            if let Some(ref mut y) = y {
+                if *y > y_last {
+                    y_current += 1;
                 }
+                y_last = *y;
+                *y = y_current;
             }
-            println!("");
         }
-        println!("===");
     }
 }
 
@@ -226,14 +213,11 @@ mod test {
             assert!(y.is_some());
         }
 
-        for n in 1..=10 {
-            println!("=== Step {} ===", n);
+        for _n in 1..=3 {
             renderer.optimize_nodes_y();
             for y in renderer.nodes_y.iter() {
                 assert!(y.is_some());
             }
         }
-
-        // panic!();
     }
 }
