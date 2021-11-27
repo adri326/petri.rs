@@ -9,6 +9,10 @@ impl Semaphore {
         Self(builder.node(value))
     }
 
+    pub fn index(&self) -> usize {
+        self.0
+    }
+
     pub fn p(&self) -> SemaphoreP {
         SemaphoreP(self.0)
     }

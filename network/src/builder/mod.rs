@@ -249,6 +249,65 @@ impl<'a> PetriBranchBuilder<'a> {
 
         self
     }
+
+    pub fn step_with_goto(mut self, goto_handle: impl AsRef<str>) -> Self {
+        let goto_node = self.builder.get_label(goto_handle.as_ref()).unwrap().as_node().unwrap();
+        let next_node = self.builder.node(0);
+        self.builder.transition(vec![self.current_node], vec![goto_node, next_node]);
+        self.current_node = next_node;
+
+        self
+    }
+
+    pub fn goto(mut self, goto_handle: impl AsRef<str>) -> Self {
+        let goto_node = self.builder.get_label(goto_handle.as_ref()).unwrap().as_node().unwrap();
+        self.builder.transition(vec![self.current_node], vec![goto_node]);
+        self.current_node = goto_node;
+
+        self
+    }
+
+    pub fn goto_branch<S: AsRef<str>>(mut self, goto_handles: impl IntoIterator<Item = S>) -> Self {
+        let output_nodes = goto_handles.into_iter()
+            .map(|label| self.builder.get_label(label.as_ref()).unwrap().as_node().unwrap()).collect::<Vec<_>>();
+        assert!(output_nodes.len() > 0);
+        let next_node = output_nodes[0];
+        self.builder.transition(vec![self.current_node], output_nodes);
+        self.current_node = next_node;
+
+        self
+    }
+
+    pub fn with_clone<F>(mut self, callback: F) -> Self
+    where
+        F: for<'c> Fn(PetriBranchBuilder<'c>),
+    {
+        {
+            let clone = self.builder.begin_branch(self.current_node);
+            (callback)(clone);
+        }
+        self
+    }
+
+    /// TODO: replace S with a Condition enum
+    pub fn step_with_condition<S: AsRef<str>>(mut self, conditions: impl IntoIterator<Item = S>) -> Self {
+        let conditions = conditions.into_iter()
+            .map(|label| self.builder.get_label(label.as_ref()).unwrap().as_node().unwrap()).collect::<Vec<_>>();
+        let mut input_nodes = conditions.clone();
+        input_nodes.push(self.current_node);
+        let next_node = self.builder.node(0);
+        let mut output_nodes = conditions;
+        output_nodes.push(next_node);
+
+        self.builder.transition(input_nodes, output_nodes);
+        self.current_node = next_node;
+
+        self
+    }
+
+    pub fn consume(mut self) {
+        self.builder.transition(vec![self.current_node], vec![]);
+    }
 }
 
 impl Label {
