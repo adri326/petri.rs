@@ -46,8 +46,8 @@ pub struct MutexSection(usize, String);
 
 impl Mutex {
     pub fn new(builder: &mut PetriBuilder, value: u8, name: impl Into<String> + Clone) -> Self {
-        let mut res = Self(builder.node_with_label(value, name.clone()), name.into());
-        builder.add_group(res.0, &res.1);
+        let mut res = Self(builder.node_with_label(value, format!("Mutex({})", name.clone().into())), name.into());
+        builder.add_group(res.0, format!("{} : Mutex", res.1));
         res
     }
 
@@ -75,30 +75,29 @@ impl Mutex {
 impl BuilderMod for MutexP {
     fn apply_transition(&self, builder: &mut PetriTransitionBuilder) {
         builder.inputs.push(self.0);
-        // TODO
-        // builder.add_group(&*self.1)
+        builder.add_label(format!("P({})", self.1));
+        builder.add_group(format!("{} : Mutex", self.1));
     }
 
     fn apply_node(&self, builder: &mut PetriBuilder, index: usize) {
-        builder.add_group(index, &*self.1);
+        builder.add_group(index, format!("{} : Mutex", self.1));
     }
 }
 
 impl BuilderMod for MutexV {
     fn apply_transition(&self, builder: &mut PetriTransitionBuilder) {
         builder.outputs.push(self.0);
-        // TODO
-        // builder.add_group(&*self.1)
+        builder.add_label(format!("V({})", self.1));
+        builder.add_group(format!("{} : Mutex", self.1));
     }
 }
 
 impl BuilderMod for MutexSection {
     fn apply_transition(&self, builder: &mut PetriTransitionBuilder) {
-        // TODO
-        // builder.add_group(&*self.1)
+        builder.add_group(format!("{} : Mutex", self.1));
     }
 
     fn apply_node(&self, builder: &mut PetriBuilder, index: usize) {
-        builder.add_group(index, &*self.1);
+        builder.add_group(index, format!("{} : Mutex", self.1));
     }
 }

@@ -401,7 +401,7 @@ mod test {
             nodes: vec![1, 0],
             node_data: vec![Default::default(); 2],
             transitions: vec![
-                PetriTransition::new(vec![0], vec![1]),
+                PetriTransition::new(vec![0], vec![1], vec![]),
             ]
         };
 
@@ -434,8 +434,8 @@ mod test {
             nodes: vec![0, 0, 0],
             node_data: vec![Default::default(); 3],
             transitions: vec![
-                PetriTransition::new(vec![0], vec![1]),
-                PetriTransition::new(vec![1], vec![2]),
+                PetriTransition::new(vec![0], vec![1], vec![]),
+                PetriTransition::new(vec![1], vec![2], vec![]),
             ]
         };
 
@@ -471,7 +471,7 @@ mod test {
             vec![1, 0],
             vec![Default::default(); 2],
             vec![
-                PetriTransition::new(vec![0], vec![1]),
+                PetriTransition::new(vec![0], vec![1], vec![]),
             ]
         );
 
@@ -489,10 +489,10 @@ mod test {
             vec![1, 1, 0, 0, 0, 0],
             vec![Default::default(); 6],
             vec![
-                PetriTransition::new(vec![0], vec![2]),
-                PetriTransition::new(vec![1], vec![3]),
-                PetriTransition::new(vec![3], vec![4]),
-                PetriTransition::new(vec![2, 4], vec![5]),
+                PetriTransition::new(vec![0], vec![2], vec![]),
+                PetriTransition::new(vec![1], vec![3], vec![]),
+                PetriTransition::new(vec![3], vec![4], vec![]),
+                PetriTransition::new(vec![2, 4], vec![5], vec![]),
             ]
         );
 
@@ -522,10 +522,10 @@ mod test {
             vec![1, 1, 0, 0, 0, 0],
             vec![Default::default(); 6],
             vec![
-                PetriTransition::new(vec![0], vec![2]),
-                PetriTransition::new(vec![1], vec![3]),
-                PetriTransition::new(vec![3], vec![4]),
-                PetriTransition::new(vec![2, 4], vec![5]),
+                PetriTransition::new(vec![0], vec![2], vec![]),
+                PetriTransition::new(vec![1], vec![3], vec![]),
+                PetriTransition::new(vec![3], vec![4], vec![]),
+                PetriTransition::new(vec![2, 4], vec![5], vec![]),
             ]
         );
 
@@ -550,9 +550,9 @@ mod test {
             vec![0; 4],
             vec![Default::default(); 4],
             vec![
-                PetriTransition::new(vec![0], vec![1]),
-                PetriTransition::new(vec![1], vec![2]),
-                PetriTransition::new(vec![1], vec![3]),
+                PetriTransition::new(vec![0], vec![1], vec![]),
+                PetriTransition::new(vec![1], vec![2], vec![]),
+                PetriTransition::new(vec![1], vec![3], vec![]),
             ]
         );
 

@@ -8,10 +8,13 @@ use data::PetriNodeData;
 #[cfg(feature = "export_dot")]
 mod export_dot;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+// TODO: reimplement PartialEq
+#[derive(Clone, Debug)]
 pub struct PetriTransition {
     pub inputs: Vec<usize>,
     pub outputs: Vec<usize>,
+    pub groups: Vec<String>,
+    pub label: Option<String>,
 }
 
 /* Invariants:
@@ -31,11 +34,17 @@ pub struct PetriNetwork {
 }
 
 impl PetriTransition {
-    pub fn new(inputs: Vec<usize>, outputs: Vec<usize>) -> Self {
+    pub fn new(inputs: Vec<usize>, outputs: Vec<usize>, groups: Vec<String>) -> Self {
         Self {
             inputs,
             outputs,
+            groups,
+            label: None,
         }
+    }
+
+    pub fn label(&mut self, label: String) {
+        self.label = Some(label);
     }
 
     #[inline]
@@ -73,6 +82,15 @@ impl PetriTransition {
         }
     }
 }
+
+impl PartialEq for PetriTransition {
+    fn eq(&self, other: &Self) -> bool {
+        self.inputs == other.inputs
+        && self.outputs == other.outputs
+    }
+}
+
+impl Eq for PetriTransition {}
 
 impl PetriNetwork {
     pub fn new(nodes: Vec<u8>, node_data: Vec<PetriNodeData>, transitions: Vec<PetriTransition>) -> Self {
@@ -359,7 +377,7 @@ pub(crate) mod test {
 
         test_recurse(&network, vec![vec![1, 0]]);
 
-        network.transitions.push(PetriTransition::new(vec![0], vec![1]));
+        network.transitions.push(PetriTransition::new(vec![0], vec![1], vec![]));
 
         test_recurse(&network, vec![vec![0, 1]]);
 
@@ -374,8 +392,8 @@ pub(crate) mod test {
             nodes: vec![0; 4],
             node_data: vec![Default::default(); 4],
             transitions: vec![
-                PetriTransition::new(vec![0], vec![1]),
-                PetriTransition::new(vec![2], vec![3]),
+                PetriTransition::new(vec![0], vec![1], vec![]),
+                PetriTransition::new(vec![2], vec![3], vec![]),
             ]
         };
 
@@ -384,7 +402,7 @@ pub(crate) mod test {
 
         test_recurse(&network, vec![vec![0, 1, 0, 1]]);
 
-        network.transitions.push(PetriTransition::new(vec![1], vec![2]));
+        network.transitions.push(PetriTransition::new(vec![1], vec![2], vec![]));
 
         test_recurse(&network, vec![vec![0, 1, 0, 1]]);
     }
@@ -395,10 +413,10 @@ pub(crate) mod test {
             nodes: vec![0; 3],
             node_data: vec![Default::default(); 3],
             transitions: vec![
-                PetriTransition::new(vec![0], vec![1]),
-                PetriTransition::new(vec![0], vec![2]),
-                PetriTransition::new(vec![1], vec![0]),
-                PetriTransition::new(vec![2], vec![0]),
+                PetriTransition::new(vec![0], vec![1], vec![]),
+                PetriTransition::new(vec![0], vec![2], vec![]),
+                PetriTransition::new(vec![1], vec![0], vec![]),
+                PetriTransition::new(vec![2], vec![0], vec![]),
             ]
         };
 
@@ -416,7 +434,7 @@ pub(crate) mod test {
             nodes: vec![1, 1, 0],
             node_data: vec![Default::default(); 3],
             transitions: vec![
-                PetriTransition::new(vec![0, 1], vec![2]),
+                PetriTransition::new(vec![0, 1], vec![2], vec![]),
             ]
         };
 
@@ -437,8 +455,8 @@ pub(crate) mod test {
             nodes: vec![1, 1, 1, 0],
             node_data: vec![Default::default(); 4],
             transitions: vec![
-                PetriTransition::new(vec![0, 1], vec![3]),
-                PetriTransition::new(vec![1, 2], vec![3]),
+                PetriTransition::new(vec![0, 1], vec![3], vec![]),
+                PetriTransition::new(vec![1, 2], vec![3], vec![]),
             ]
         };
 

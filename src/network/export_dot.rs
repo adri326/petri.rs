@@ -6,14 +6,25 @@ pub fn export_network(network: &PetriNetwork, writer: &mut DotWriter) {
     digraph.set_font_size(14.0);
     digraph.set("nodesep", "0.5", false);
 
-    let mut groups: HashMap<String, Vec<usize>> = HashMap::new();
+    let mut groups: HashMap<String, (Vec<usize>, Vec<usize>)> = HashMap::new();
 
     for (index, data) in network.node_data.iter().enumerate() {
         for group in data.groups.iter() {
             match groups.get_mut(group) {
-                Some(ref mut members) => members.push(index),
+                Some(ref mut members) => members.0.push(index),
                 None => {
-                    groups.insert(group.clone(), vec![index]);
+                    groups.insert(group.clone(), (vec![index], vec![]));
+                }
+            }
+        }
+    }
+
+    for (index, transition) in network.transitions.iter().enumerate() {
+        for group in transition.groups.iter() {
+            match groups.get_mut(group) {
+                Some(ref mut members) => members.1.push(index),
+                None => {
+                    groups.insert(group.clone(), (vec![], vec![index]));
                 }
             }
         }
@@ -23,8 +34,11 @@ pub fn export_network(network: &PetriNetwork, writer: &mut DotWriter) {
         let mut cluster = digraph.cluster();
         cluster.set_label(&group_name);
         cluster.set_style(Style::Filled);
-        for index in members {
+        for index in members.0 {
             cluster.node_named(&format!("N{}", index));
+        }
+        for index in members.1 {
+            cluster.node_named(&format!("T{}", index));
         }
     }
 
@@ -51,12 +65,18 @@ pub fn export_network(network: &PetriNetwork, writer: &mut DotWriter) {
 
     for (index, transition) in network.transitions.iter().enumerate() {
         let name = format!("T{}", index);
-        digraph.node_named(&name)
-            .set_shape(Shape::Rectangle)
-            .set("height", "0.4", false)
-            .set("width", "0.4", false)
-            .set("margin", "0.01", false)
-            .set_style(Style::Filled);
+        {
+            let mut transition_node = digraph.node_named(&name);
+            transition_node.set_shape(Shape::Rectangle);
+            transition_node.set("height", "0.4", false);
+            transition_node.set("width", "0.4", false);
+            transition_node.set("margin", "0.01", false);
+            transition_node.set_style(Style::Filled);
+
+            if let Some(label) = &transition.label {
+                transition_node.set_label(label);
+            }
+        }
 
         for input in transition.inputs.iter() {
             digraph.edge(&format!("N{}", input), &name);

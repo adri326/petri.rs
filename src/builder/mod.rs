@@ -23,6 +23,7 @@ pub struct PetriTransitionBuilder<'a> {
     pub inputs: Vec<usize>,
     pub outputs: Vec<usize>,
     pub labels: Vec<String>,
+    pub groups: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -109,7 +110,7 @@ impl PetriBuilder {
 
     pub fn transition(&mut self, inputs: Vec<usize>, outputs: Vec<usize>) -> usize {
         let res = self.transitions.len();
-        self.transitions.push(PetriTransition::new(inputs, outputs));
+        self.transitions.push(PetriTransition::new(inputs, outputs, vec![]));
         res
     }
 
@@ -119,6 +120,7 @@ impl PetriBuilder {
             inputs: Vec::new(),
             outputs: Vec::new(),
             labels: Vec::new(),
+            groups: Vec::new(),
         }
     }
 
@@ -150,7 +152,16 @@ impl PetriBuilder {
         }).collect()
     }
 
-    pub fn build(self) -> PetriNetwork {
+    pub fn build(mut self) -> PetriNetwork {
+        for (name, index) in self.labels.iter() {
+            match index {
+                Label::Transition(index) => {
+                    self.transitions[*index].label(name.to_string());
+                },
+                _ => {}
+            }
+        }
+
         PetriNetwork {
             node_data: self.build_data(),
             nodes: self.nodes,
@@ -198,11 +209,25 @@ impl<'a> PetriTransitionBuilder<'a> {
         self
     }
 
+    pub fn add_label(&mut self, name: String) {
+        self.labels.push(name);
+    }
+
+    pub fn group(mut self, group_name: impl Into<String>) -> Self {
+        self.groups.push(group_name.into());
+
+        self
+    }
+
+    pub fn add_group(&mut self, group_name: String) {
+        self.groups.push(group_name);
+    }
+
     pub fn build(self) -> usize {
         let res = self.builder.transitions.len();
         self.builder
             .transitions
-            .push(PetriTransition::new(self.inputs, self.outputs));
+            .push(PetriTransition::new(self.inputs, self.outputs, self.groups));
         for name in self.labels {
             self.builder.label(Label::Transition(res), name);
         }
@@ -486,8 +511,8 @@ mod test {
             nodes: vec![1, 0, 0],
             node_data: vec![Default::default(); 3],
             transitions: vec![
-                PetriTransition::new(vec![0], vec![1]),
-                PetriTransition::new(vec![1], vec![0, 2]),
+                PetriTransition::new(vec![0], vec![1], vec![]),
+                PetriTransition::new(vec![1], vec![0, 2], vec![]),
             ],
         };
 
@@ -513,10 +538,10 @@ mod test {
             nodes: vec![1, 1, 1, 0, 0, 0, 0], // [in_a, in_b, mutex, mid_a, mid_b, out_a, out_b]
             node_data: vec![Default::default(); 7],
             transitions: vec![
-                PetriTransition::new(vec![0, 2], vec![3]),
-                PetriTransition::new(vec![1, 2], vec![4]),
-                PetriTransition::new(vec![3], vec![5, 2]),
-                PetriTransition::new(vec![4], vec![6, 2]),
+                PetriTransition::new(vec![0, 2], vec![3], vec![]),
+                PetriTransition::new(vec![1, 2], vec![4], vec![]),
+                PetriTransition::new(vec![3], vec![5, 2], vec![]),
+                PetriTransition::new(vec![4], vec![6, 2], vec![]),
             ],
         };
 
@@ -600,11 +625,11 @@ mod test {
             nodes: vec![1, 0, 0, 0, 0, 0, 0],
             node_data: vec![Default::default(); 7],
             transitions: vec![
-                PetriTransition::new(vec![0], vec![1]),
-                PetriTransition::new(vec![1], vec![2, 3]),
-                PetriTransition::new(vec![3], vec![4]),
-                PetriTransition::new(vec![4], vec![5]),
-                PetriTransition::new(vec![2, 5], vec![6]),
+                PetriTransition::new(vec![0], vec![1], vec![]),
+                PetriTransition::new(vec![1], vec![2, 3], vec![]),
+                PetriTransition::new(vec![3], vec![4], vec![]),
+                PetriTransition::new(vec![4], vec![5], vec![]),
+                PetriTransition::new(vec![2, 5], vec![6], vec![]),
             ],
         };
 
@@ -637,13 +662,13 @@ mod test {
             nodes: vec![1, 0, 0, 0, 0, 0, 0],
             node_data: vec![Default::default(); 7],
             transitions: vec![
-                PetriTransition::new(vec![0], vec![1]),
-                PetriTransition::new(vec![1], vec![2]),
-                PetriTransition::new(vec![1], vec![3]),
-                PetriTransition::new(vec![3], vec![4]),
-                PetriTransition::new(vec![4], vec![5]),
-                PetriTransition::new(vec![2], vec![6]),
-                PetriTransition::new(vec![5], vec![6]),
+                PetriTransition::new(vec![0], vec![1], vec![]),
+                PetriTransition::new(vec![1], vec![2], vec![]),
+                PetriTransition::new(vec![1], vec![3], vec![]),
+                PetriTransition::new(vec![3], vec![4], vec![]),
+                PetriTransition::new(vec![4], vec![5], vec![]),
+                PetriTransition::new(vec![2], vec![6], vec![]),
+                PetriTransition::new(vec![5], vec![6], vec![]),
             ],
         };
 
@@ -682,9 +707,9 @@ mod test {
                 Default::default(),
             ],
             transitions: vec![
-                PetriTransition::new(vec![0, 1], vec![2]),
-                PetriTransition::new(vec![2], vec![3]),
-                PetriTransition::new(vec![3], vec![4, 1]),
+                PetriTransition::new(vec![0, 1], vec![2], vec![]),
+                PetriTransition::new(vec![2], vec![3], vec![]),
+                PetriTransition::new(vec![3], vec![4, 1], vec![]),
             ]
         };
 

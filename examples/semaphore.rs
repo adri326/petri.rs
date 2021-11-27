@@ -46,6 +46,7 @@ fn main() -> Result<(), std::io::Error> {
         .step()
         .step()
         .step_with_mod(counter_mutex.p())
+        .with_mod(counter_mutex.section())
         .join(["counter"])
         .with_clone(|branch| {
             branch
@@ -54,6 +55,7 @@ fn main() -> Result<(), std::io::Error> {
                 .label("client_2");
         })
         .join_any(["client_2"])
+        .without_mod()
         .step_with_mod(counter_mutex.v())
         .label("end");
     let end = builder.get_label("end").unwrap().as_node().unwrap();
