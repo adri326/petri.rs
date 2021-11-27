@@ -6,6 +6,28 @@ pub fn export_network(network: &PetriNetwork, writer: &mut DotWriter) {
     digraph.set_font_size(14.0);
     digraph.set("nodesep", "0.5", false);
 
+    let mut groups: HashMap<String, Vec<usize>> = HashMap::new();
+
+    for (index, data) in network.node_data.iter().enumerate() {
+        for group in data.groups.iter() {
+            match groups.get_mut(group) {
+                Some(ref mut members) => members.push(index),
+                None => {
+                    groups.insert(group.clone(), vec![index]);
+                }
+            }
+        }
+    }
+
+    for (group_name, members) in groups {
+        let mut cluster = digraph.cluster();
+        cluster.set_label(&group_name);
+        cluster.set_style(Style::Filled);
+        for index in members {
+            cluster.node_named(&format!("N{}", index));
+        }
+    }
+
     for (index, &value) in network.nodes.iter().enumerate() {
         let data = &network.node_data[index];
         let mut node = digraph.node_named(&format!("N{}", index));

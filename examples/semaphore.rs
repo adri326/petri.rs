@@ -1,6 +1,6 @@
 #[allow(unused_imports)]
 use petri_network::{PetriNetwork, PetriBuilder};
-use petri_network::builder::structures::Semaphore;
+use petri_network::builder::structures::{Semaphore, Mutex};
 
 fn main() -> Result<(), std::io::Error> {
     let mut builder = PetriBuilder::new();
@@ -9,7 +9,7 @@ fn main() -> Result<(), std::io::Error> {
     let start = builder.node_with_label(3, "start");
     builder.transition(vec![start], vec![start]); // Clients may wait as much as they want
 
-    let counter_mutex = Semaphore::new(&mut builder, 1);
+    let counter_mutex = Mutex::new(&mut builder, 1, "Counter");
     let wake_coiffeur = Semaphore::new(&mut builder, 0);
     let _counter = builder.node_with_label(0, "counter");
     let waiting_line = Semaphore::new(&mut builder, 0);
@@ -25,16 +25,20 @@ fn main() -> Result<(), std::io::Error> {
     // Process "Client"
     builder.begin_branch(start)
         .step_with_mod(counter_mutex.p())
+        .with_mod(counter_mutex.section())
+        .step()
         .step()
         .with_clone(|branch| {
             branch
                 .step_with_condition(["counter"]) // if counter > 0
                 .step_with_goto("counter") // counter += 1
+                .without_mod()
                 .step_with_mod(counter_mutex.v())
                 .step_with_mod(waiting_line.p())
                 .label("client_1");
         })
         .step_with_goto("counter") // counter += 1
+        .without_mod()
         .step_with_mod(counter_mutex.v())
         .join_any(["client_1"])
         .step_with_mod(wake_coiffeur.v())

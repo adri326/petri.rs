@@ -27,20 +27,39 @@ pub struct PetriTransitionBuilder<'a> {
 
 #[derive(Debug)]
 pub struct PetriBranchBuilder<'a> {
-    pub modifiers: Vec<Box<dyn BuilderMod<'a> + 'a>>,
+    pub modifiers: Vec<Box<dyn BuilderMod + 'static>>,
     pub builder: &'a mut PetriBuilder,
     pub current_node: usize,
 }
 
 /// A trait for defining shared, custom operations on nodes and transitions.
-/// When implementing this trait, you should also implement the `Debug` trait.
+/// When implementing this trait, you should also implement the `Debug` and `Clone` traits.
 /// You should then implement the `apply_transition` method, which will apply the modifications to the transition builder.
 /// The `apply_node` method lets you customize what happens when a new node is created.
-pub trait BuilderMod<'a>: std::fmt::Debug {
+pub trait BuilderMod: std::fmt::Debug + BuilderModClone {
     fn apply_transition(&self, builder: &mut PetriTransitionBuilder);
 
     fn apply_node(&self, _builder: &mut PetriBuilder, _index: usize) {
         // noop
+    }
+}
+
+pub trait BuilderModClone {
+    fn clone_box(&self) -> Box<dyn BuilderMod + 'static>;
+}
+
+impl<T> BuilderModClone for T
+where
+    T: Clone + BuilderMod + 'static
+{
+    fn clone_box(&self) -> Box<dyn BuilderMod + 'static> {
+        Box::new(self.clone())
+    }
+}
+
+impl Clone for Box<dyn BuilderMod + 'static> {
+    fn clone(&self) -> Self {
+        self.clone_box()
     }
 }
 
@@ -190,12 +209,12 @@ impl<'a> PetriTransitionBuilder<'a> {
         res
     }
 
-    pub fn with_mod<'b, M: BuilderMod<'b>>(mut self, modifier: &M) -> Self {
+    pub fn with_mod<M: BuilderMod>(mut self, modifier: &M) -> Self {
         modifier.apply_transition(&mut self);
         self
     }
 
-    pub fn with_mods<'b>(mut self, modifiers: &Vec<Box<dyn BuilderMod<'b> + 'b>>) -> Self {
+    pub fn with_mods(mut self, modifiers: &Vec<Box<dyn BuilderMod>>) -> Self {
         for modifier in modifiers.iter() {
             modifier.apply_transition(&mut self);
         }
@@ -205,7 +224,7 @@ impl<'a> PetriTransitionBuilder<'a> {
 }
 
 impl<'a> PetriBranchBuilder<'a> {
-    pub fn with_mod<M: BuilderMod<'a> + 'a>(mut self, modifier: M) -> Self {
+    pub fn with_mod<M: BuilderMod + 'static>(mut self, modifier: M) -> Self {
         self.modifiers.push(Box::new(modifier));
 
         self
@@ -261,8 +280,9 @@ impl<'a> PetriBranchBuilder<'a> {
         self
     }
 
-    pub fn step_with_mod<'b, M: BuilderMod<'b>>(mut self, modifier: M) -> Self {
+    pub fn step_with_mod<M: BuilderMod>(mut self, modifier: M) -> Self {
         let next_node = self.node(0);
+        modifier.apply_node(self.builder, next_node);
         self.builder
             .begin_transition()
             .input(self.current_node)
@@ -409,7 +429,8 @@ impl<'a> PetriBranchBuilder<'a> {
         F: for<'c> Fn(PetriBranchBuilder<'c>),
     {
         {
-            let clone = self.builder.begin_branch(self.current_node);
+            let mut clone = self.builder.begin_branch(self.current_node);
+            clone.modifiers = self.modifiers.clone();
             (callback)(clone);
         }
         self
@@ -653,10 +674,16 @@ mod test {
     fn test_branch_modifiers() {
         let expected = PetriNetwork {
             nodes: vec![2, 0, 0, 0, 0],
-            node_data: vec![Default::default(); 5],
+            node_data: vec![
+                Default::default(),
+                PetriNodeData::default().label("M"),
+                Default::default(),
+                Default::default(),
+                Default::default(),
+            ],
             transitions: vec![
                 PetriTransition::new(vec![0, 1], vec![2]),
-                PetriTransition::new(vec![2, 1], vec![3]),
+                PetriTransition::new(vec![2], vec![3]),
                 PetriTransition::new(vec![3], vec![4, 1]),
             ]
         };
@@ -666,29 +693,28 @@ mod test {
         let mutex = structures::Mutex::new(&mut builder, 0, "M");
 
         builder.begin_branch(start)
-            .with_mod(mutex.p())
-            .step()
+            .step_with_mod(mutex.p())
+            .with_mod(mutex.section())
             .step()
             .without_mod()
-            .with_mod(mutex.v())
-            .step();
+            .step_with_mod(mutex.v());
 
         println!("{:?}", builder.groups);
 
         assert_eq!(builder.groups[0], Vec::<String>::new());
-        assert_eq!(builder.groups[1], Vec::<String>::new());
+        assert_eq!(builder.groups[1], vec!["M"]);
         assert_eq!(builder.groups[2], vec!["M"]);
         assert_eq!(builder.groups[3], vec!["M"]);
-        assert_eq!(builder.groups[4], vec!["M"]);
+        assert_eq!(builder.groups[4], Vec::<String>::new());
 
         let actual = builder.build();
 
         assert_eq!(actual, expected);
+        assert!(actual.get_node(1).is_some());
+        assert_eq!(actual.get_node(1).unwrap().1.groups, vec!["M"]);
         assert!(actual.get_node(2).is_some());
         assert_eq!(actual.get_node(2).unwrap().1.groups, vec!["M"]);
         assert!(actual.get_node(3).is_some());
         assert_eq!(actual.get_node(3).unwrap().1.groups, vec!["M"]);
-        assert!(actual.get_node(4).is_some());
-        assert_eq!(actual.get_node(4).unwrap().1.groups, vec!["M"]);
     }
 }
