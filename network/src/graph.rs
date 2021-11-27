@@ -399,6 +399,7 @@ mod test {
     fn test_generate_graph() {
         let mut network = PetriNetwork {
             nodes: vec![1, 0],
+            node_data: vec![Default::default(); 2],
             transitions: vec![
                 PetriTransition::new(vec![0], vec![1]),
             ]
@@ -431,6 +432,7 @@ mod test {
         // Construct three graphs A, B, C such that A ⊂ B and B ⊂ C
         let mut network = PetriNetwork {
             nodes: vec![0, 0, 0],
+            node_data: vec![Default::default(); 3],
             transitions: vec![
                 PetriTransition::new(vec![0], vec![1]),
                 PetriTransition::new(vec![1], vec![2]),
@@ -467,6 +469,7 @@ mod test {
     fn test_graph_from() {
         let network = PetriNetwork::new(
             vec![1, 0],
+            vec![Default::default(); 2],
             vec![
                 PetriTransition::new(vec![0], vec![1]),
             ]
@@ -484,6 +487,7 @@ mod test {
     fn test_graph_transpose() {
         let network = PetriNetwork::new(
             vec![1, 1, 0, 0, 0, 0],
+            vec![Default::default(); 6],
             vec![
                 PetriTransition::new(vec![0], vec![2]),
                 PetriTransition::new(vec![1], vec![3]),
@@ -516,6 +520,7 @@ mod test {
     fn test_graph_always_reaches() {
         let mut network = PetriNetwork::new(
             vec![1, 1, 0, 0, 0, 0],
+            vec![Default::default(); 6],
             vec![
                 PetriTransition::new(vec![0], vec![2]),
                 PetriTransition::new(vec![1], vec![3]),
@@ -530,8 +535,8 @@ mod test {
 
         for a in 0..=1 {
             for b in 0..=1 {
-                network.set_node(0, a);
-                network.set_node(1, b);
+                network.set_node(0, a, Default::default());
+                network.set_node(1, b, Default::default());
                 let graph = network.generate_graph();
                 let reaches_c = graph.always_reaches(|state| state[5] == 1); // reaches_c = [A, B, 0, 0, 0, 0] ->> [0, 0, 0, 0, 0, 1]
                 assert_eq!(reaches_c, a == 1 && b == 1); // reaches_c <=> (A, B) = (1, 1)
@@ -543,6 +548,7 @@ mod test {
     fn test_step_fork() {
         let mut network = PetriNetwork::new(
             vec![0; 4],
+            vec![Default::default(); 4],
             vec![
                 PetriTransition::new(vec![0], vec![1]),
                 PetriTransition::new(vec![1], vec![2]),
@@ -552,17 +558,17 @@ mod test {
 
         test_recurse(&network, vec![vec![0; 4]]);
 
-        network.set_node(0, 1);
+        network.set_node(0, 1, Default::default());
 
         test_recurse(&network, vec![vec![0, 1, 0, 0]]);
 
-        network.set_node(0, 0);
-        network.set_node(1, 1);
+        network.set_node(0, 0, Default::default());
+        network.set_node(1, 1, Default::default());
 
         test_recurse(&network, vec![vec![0, 0, 1, 0], vec![0, 0, 0, 1]]);
 
-        network.set_node(1, 0);
-        network.set_node(0, 1);
+        network.set_node(1, 0, Default::default());
+        network.set_node(0, 1, Default::default());
         let graph = network.generate_graph();
 
         assert_eq!(graph, PetriGraph::from([

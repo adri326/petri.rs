@@ -2,6 +2,9 @@ use std::collections::{HashMap, HashSet};
 use std::borrow::Cow;
 use crate::graph::PetriGraph;
 
+pub mod data;
+use data::PetriNodeData;
+
 #[cfg(feature = "export_dot")]
 mod export_dot;
 
@@ -17,11 +20,13 @@ pub struct PetriTransition {
         ∀ input ∈ transition.inputs, input < nodes.len() &&
         ∀ output ∈ transition.outputs, output < nodes.len()
     )
+
+    node_data.len() = nodes.len()
 */
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PetriNetwork {
     pub(crate) nodes: Vec<u8>,
-    // pub(crate) node_data: Vec<Option<PetriNodeData>>,
+    pub(crate) node_data: Vec<PetriNodeData>,
     pub(crate) transitions: Vec<PetriTransition>,
 }
 
@@ -70,35 +75,46 @@ impl PetriTransition {
 }
 
 impl PetriNetwork {
-    pub fn new(nodes: Vec<u8>, transitions: Vec<PetriTransition>) -> Self {
+    pub fn new(nodes: Vec<u8>, node_data: Vec<PetriNodeData>, transitions: Vec<PetriTransition>) -> Self {
         let mut res = Self {
             nodes,
+            node_data,
             transitions
         };
         let max_index = res.max_index();
         if res.nodes.len() <= max_index {
             res.nodes.resize(max_index, 0);
         }
+        res.node_data.resize(res.nodes.len(), PetriNodeData::default());
         res
     }
 
-    pub fn set_node(&mut self, index: usize, value: u8) {
+    pub fn set_node(&mut self, index: usize, value: u8, data: PetriNodeData) {
         if self.nodes.len() <= index {
             self.nodes.resize(index, 0);
+            self.node_data.resize(index, Default::default());
         }
         self.nodes[index] = value;
+        self.node_data[index] = data;
     }
 
-    pub fn get_node(&self, index: usize) -> u8 {
+    pub fn get_node(&self, index: usize) -> Option<(u8, &PetriNodeData)> {
         if self.nodes.len() <= index {
-            0
+            None
         } else {
-            self.nodes[index]
+            Some((
+                self.nodes[index],
+                &self.node_data[index],
+            ))
         }
     }
 
     pub fn nodes(&self) -> &Vec<u8> {
         &self.nodes
+    }
+
+    pub fn node_data(&self) -> &Vec<PetriNodeData> {
+        &self.node_data
     }
 
     pub fn transitions(&self) -> &Vec<PetriTransition> {
@@ -121,6 +137,7 @@ impl PetriNetwork {
         if self.nodes.len() <= max_index {
             self.nodes.resize(max_index, 0);
         }
+        self.node_data.resize(self.nodes.len(), Default::default());
     }
 
     /// A safe variant to `get_transition_mut`, which makes sure that the class invariants are upheld.
@@ -143,6 +160,7 @@ impl PetriNetwork {
 
                 if self.nodes.len() <= max_index {
                     self.nodes.resize(max_index, 0);
+                    self.node_data.resize(max_index, Default::default());
                 }
 
                 Some(res)
@@ -331,6 +349,7 @@ pub(crate) mod test {
     fn test_recurse_simple() {
         let mut network = PetriNetwork {
             nodes: vec![0, 0],
+            node_data: vec![Default::default(); 2],
             transitions: vec![]
         };
 
@@ -353,6 +372,7 @@ pub(crate) mod test {
     fn test_recurse_parallel() {
         let mut network = PetriNetwork {
             nodes: vec![0; 4],
+            node_data: vec![Default::default(); 4],
             transitions: vec![
                 PetriTransition::new(vec![0], vec![1]),
                 PetriTransition::new(vec![2], vec![3]),
@@ -373,6 +393,7 @@ pub(crate) mod test {
     fn test_recurse_fork() {
         let mut network = PetriNetwork {
             nodes: vec![0; 3],
+            node_data: vec![Default::default(); 3],
             transitions: vec![
                 PetriTransition::new(vec![0], vec![1]),
                 PetriTransition::new(vec![0], vec![2]),
@@ -393,6 +414,7 @@ pub(crate) mod test {
     fn test_recurse_join() {
         let mut network = PetriNetwork {
             nodes: vec![1, 1, 0],
+            node_data: vec![Default::default(); 3],
             transitions: vec![
                 PetriTransition::new(vec![0, 1], vec![2]),
             ]
@@ -413,6 +435,7 @@ pub(crate) mod test {
     fn test_recurse_conflict() {
         let mut network = PetriNetwork {
             nodes: vec![1, 1, 1, 0],
+            node_data: vec![Default::default(); 4],
             transitions: vec![
                 PetriTransition::new(vec![0, 1], vec![3]),
                 PetriTransition::new(vec![1, 2], vec![3]),

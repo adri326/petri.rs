@@ -1,4 +1,4 @@
-use crate::{PetriNetwork, PetriTransition};
+use crate::{PetriNetwork, PetriTransition, PetriNodeData};
 use std::collections::HashMap;
 
 pub mod structures;
@@ -86,8 +86,29 @@ impl PetriBuilder {
         }
     }
 
+    fn build_data(&self) -> Vec<PetriNodeData> {
+        self.nodes.iter().enumerate().map(|(index, _node)| {
+            let mut label = None;
+            for (name, i) in self.labels.iter() {
+                if *i == Label::Node(index) {
+                    label = Some(name.clone());
+                }
+            }
+
+            let groups = Vec::new();
+            let max_value = None;
+
+            PetriNodeData {
+                label,
+                groups,
+                max_value,
+            }
+        }).collect()
+    }
+
     pub fn build(self) -> PetriNetwork {
         PetriNetwork {
+            node_data: self.build_data(),
             nodes: self.nodes,
             transitions: self.transitions,
         }
@@ -96,6 +117,7 @@ impl PetriBuilder {
     pub fn build_clone(&self) -> PetriNetwork {
         PetriNetwork {
             nodes: self.nodes.clone(),
+            node_data: self.build_data(),
             transitions: self.transitions.clone(),
         }
     }
@@ -278,7 +300,7 @@ impl<'a> PetriBranchBuilder<'a> {
         self
     }
 
-    pub fn with_clone<F>(mut self, callback: F) -> Self
+    pub fn with_clone<F>(self, callback: F) -> Self
     where
         F: for<'c> Fn(PetriBranchBuilder<'c>),
     {
@@ -305,7 +327,7 @@ impl<'a> PetriBranchBuilder<'a> {
         self
     }
 
-    pub fn consume(mut self) {
+    pub fn consume(self) {
         self.builder.transition(vec![self.current_node], vec![]);
     }
 }
@@ -334,6 +356,7 @@ mod test {
     fn build_simple_network() {
         let expected = PetriNetwork {
             nodes: vec![1, 0, 0],
+            node_data: vec![Default::default(); 3],
             transitions: vec![
                 PetriTransition::new(vec![0], vec![1]),
                 PetriTransition::new(vec![1], vec![0, 2]),
@@ -360,6 +383,7 @@ mod test {
     fn build_semaphore() {
         let expected = PetriNetwork {
             nodes: vec![1, 1, 1, 0, 0, 0, 0], // [in_a, in_b, mutex, mid_a, mid_b, out_a, out_b]
+            node_data: vec![Default::default(); 7],
             transitions: vec![
                 PetriTransition::new(vec![0, 2], vec![3]),
                 PetriTransition::new(vec![1, 2], vec![4]),
@@ -446,6 +470,7 @@ mod test {
     fn test_branch_builder() {
         let expected = PetriNetwork {
             nodes: vec![1, 0, 0, 0, 0, 0, 0],
+            node_data: vec![Default::default(); 7],
             transitions: vec![
                 PetriTransition::new(vec![0], vec![1]),
                 PetriTransition::new(vec![1], vec![2, 3]),
@@ -482,6 +507,7 @@ mod test {
     fn test_branch_builder_fork() {
         let expected = PetriNetwork {
             nodes: vec![1, 0, 0, 0, 0, 0, 0],
+            node_data: vec![Default::default(); 7],
             transitions: vec![
                 PetriTransition::new(vec![0], vec![1]),
                 PetriTransition::new(vec![1], vec![2]),

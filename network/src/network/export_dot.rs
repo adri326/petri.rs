@@ -7,19 +7,23 @@ pub fn export_network(network: &PetriNetwork, writer: &mut DotWriter) {
     digraph.set("nodesep", "0.5", false);
 
     for (index, &value) in network.nodes.iter().enumerate() {
+        let data = &network.node_data[index];
         let mut node = digraph.node_named(&format!("N{}", index));
         node.set_shape(Shape::Circle);
 
         if value <= 3 {
             node.set_label(&format!("{}", "\u{25cf}".repeat(value as usize)));
-            if value == 1 {
-                node.set_font_size(28.0);
-                node.set("width", "0.5", false);
-                node.set("height", "0.5", false);
-                node.set("fixedsize", "true", false);
-            }
+            // if value == 1 {
+            //     node.set_font_size(28.0);
+            //     node.set("width", "0.5", false);
+            //     node.set("height", "0.5", false);
+            //     node.set("fixedsize", "true", false);
+            // }
         } else {
             node.set_label(&format!("{}", value));
+        }
+        if data.label.is_some() {
+            node.set("xlabel", &format!("{}", data.label.as_ref().unwrap()), true);
         }
     }
 

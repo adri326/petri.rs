@@ -5,12 +5,13 @@ mod network;
 pub use network::{
     PetriNetwork,
     PetriTransition,
+    data::PetriNodeData,
 };
 
 pub mod builder;
 pub use builder::{
     PetriBuilder,
-    PetriTransitionBuilder
+    PetriTransitionBuilder,
 };
 
 #[cfg(any(
