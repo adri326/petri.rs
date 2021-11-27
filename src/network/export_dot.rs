@@ -48,7 +48,7 @@ pub fn export_network(network: &PetriNetwork, writer: &mut DotWriter) {
         node.set_shape(Shape::Circle);
 
         if value <= 3 {
-            node.set_label(&format!("{}", "\u{25cf}".repeat(value as usize)));
+            node.set_label(&format!("{}", "&#9679;".repeat(value as usize)));
             // if value == 1 {
             //     node.set_font_size(28.0);
             //     node.set("width", "0.5", false);

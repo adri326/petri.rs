@@ -101,3 +101,22 @@ impl BuilderMod for MutexSection {
         builder.add_group(index, format!("{} : Mutex", self.1));
     }
 }
+
+#[derive(Clone, Debug)]
+pub struct Group(String); // (section_name)
+
+impl Group {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self(name.into())
+    }
+}
+
+impl BuilderMod for Group {
+    fn apply_transition(&self, builder: &mut PetriTransitionBuilder) {
+        builder.add_group(self.0.clone());
+    }
+
+    fn apply_node(&self, builder: &mut PetriBuilder, index: usize) {
+        builder.add_group(index, self.0.clone());
+    }
+}

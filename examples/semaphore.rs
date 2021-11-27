@@ -1,10 +1,11 @@
 #[allow(unused_imports)]
 use petri_network::{PetriNetwork, PetriBuilder};
-use petri_network::builder::structures::{Semaphore, Mutex};
+use petri_network::builder::structures::{Semaphore, Mutex, Group};
 
 fn main() -> Result<(), std::io::Error> {
     let mut builder = PetriBuilder::new();
     let coiffeur = builder.node_with_label(1, "coiffeur");
+    builder.add_group(coiffeur, "Coiffeur");
 
     let start = builder.node_with_label(3, "start");
     builder.transition(vec![start], vec![start]); // Clients may wait as much as they want
@@ -13,9 +14,11 @@ fn main() -> Result<(), std::io::Error> {
     let wake_coiffeur = Semaphore::new(&mut builder, 0);
     let _counter = builder.node_with_label(0, "counter");
     let waiting_line = Semaphore::new(&mut builder, 0);
+    let coiffeur_group = Group::new("Coiffeur");
 
     // Process "Coiffeur":
     builder.begin_branch(coiffeur)
+        .with_mod(coiffeur_group.clone())
         .step_with_mod(wake_coiffeur.p())
         .step()
         .step()
@@ -42,9 +45,11 @@ fn main() -> Result<(), std::io::Error> {
         .step_with_mod(counter_mutex.v())
         .join_any(["client_1"])
         .step_with_mod(wake_coiffeur.v())
+        .with_mod(coiffeur_group.clone())
         .step()
         .step()
         .step()
+        .without_mod()
         .step_with_mod(counter_mutex.p())
         .with_mod(counter_mutex.section())
         .join(["counter"])
