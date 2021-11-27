@@ -19,7 +19,7 @@ conflict_slow = []
 export_dot = ["dot-writer"]
 
 [lib]
-path = "network/src/lib.rs"
+path = "src/lib.rs"
 
 [workspace]
 members = [
