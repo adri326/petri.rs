@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::borrow::Cow;
 use crate::graph::PetriGraph;
 
 #[cfg(feature = "export_dot")]
@@ -10,9 +11,17 @@ pub struct PetriTransition {
     pub outputs: Vec<usize>,
 }
 
+/* Invariants:
+    nodes.len() > max(max(transitions→inputs), max(transitions→outputs))
+    => ∀ transition ∈ transitions, (
+        ∀ input ∈ transition.inputs, input < nodes.len() &&
+        ∀ output ∈ transition.outputs, output < nodes.len()
+    )
+*/
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PetriNetwork {
     pub(crate) nodes: Vec<u8>,
+    // pub(crate) node_data: Vec<Option<PetriNodeData>>,
     pub(crate) transitions: Vec<PetriTransition>,
 }
 
@@ -62,15 +71,20 @@ impl PetriTransition {
 
 impl PetriNetwork {
     pub fn new(nodes: Vec<u8>, transitions: Vec<PetriTransition>) -> Self {
-        Self {
+        let mut res = Self {
             nodes,
             transitions
+        };
+        let max_index = res.max_index();
+        if res.nodes.len() <= max_index {
+            res.nodes.resize(max_index, 0);
         }
+        res
     }
 
     pub fn set_node(&mut self, index: usize, value: u8) {
-        while self.nodes.len() <= index {
-            self.nodes.push(0);
+        if self.nodes.len() <= index {
+            self.nodes.resize(index, 0);
         }
         self.nodes[index] = value;
     }
@@ -95,24 +109,71 @@ impl PetriNetwork {
         self.transitions.get(index)
     }
 
-    pub fn get_transition_mut<'b>(&'b mut self, index: usize) -> Option<&'b mut PetriTransition> {
+    /// This method is unsafe because it might break the class invariants.
+    /// You should call `uphold_invariants` to avoid bugs.
+    pub unsafe fn get_transition_mut<'b>(&'b mut self, index: usize) -> Option<&'b mut PetriTransition> {
         self.transitions.get_mut(index)
     }
 
-    pub fn step(&self) -> Vec<Vec<u8>> {
+    /// Makes sure that the class invariants are upheld
+    pub fn uphold_invariants(&mut self) {
         let max_index = self.max_index();
+        if self.nodes.len() <= max_index {
+            self.nodes.resize(max_index, 0);
+        }
+    }
 
-        let mut nodes = Vec::with_capacity(max_index + 1);
-        nodes.extend(self.nodes.iter());
-        while nodes.len() <= max_index {
-            nodes.push(0);
+    /// A safe variant to `get_transition_mut`, which makes sure that the class invariants are upheld.
+    /// It has an additional overhead, so you should use `PetriBuilder` and make changes there first.
+    pub fn with_transition_mut<F, T: Copy>(&mut self, index: usize, callback: F) -> Option<T>
+    where
+        F: for<'c> FnOnce(&'c mut PetriTransition) -> T
+    {
+        match self.transitions.get_mut(index) {
+            Some(ref mut transition) => {
+                let res = (callback)(transition);
+
+                let mut max_index = 0;
+                for &input in transition.inputs.iter() {
+                    max_index = max_index.max(input);
+                }
+                for &output in transition.outputs.iter() {
+                    max_index = max_index.max(output);
+                }
+
+                if self.nodes.len() <= max_index {
+                    self.nodes.resize(max_index, 0);
+                }
+
+                Some(res)
+            }
+            None => None,
+        }
+    }
+
+    pub fn push_transition(&mut self, transition: PetriTransition) {
+        let mut max_index = 0;
+        for &input in transition.inputs.iter() {
+            max_index = max_index.max(input);
+        }
+        for &output in transition.outputs.iter() {
+            max_index = max_index.max(output);
         }
 
-        let res = self.recurse(0, nodes.clone(), nodes, &self.get_order());
+        if self.nodes.len() <= max_index {
+            self.nodes.resize(max_index, 0);
+        }
+
+        self.transitions.push(transition);
+    }
+
+    pub fn step(&self) -> Vec<Vec<u8>> {
+        let res = self.recurse(0, Cow::Borrowed(&self.nodes), Cow::Borrowed(&self.nodes), &self.get_order());
 
         if cfg!(feature = "conflict_fast") {
             res
         } else {
+            // Deduplicate output (TODO: do this in `recurse`?)
             res.into_iter().collect::<HashSet<_>>().into_iter().collect::<Vec<_>>()
         }
     }
@@ -145,7 +206,7 @@ impl PetriNetwork {
             if map.get(&current_node).is_none() {
                 let mut hashset = HashSet::new();
 
-                let next_states = self.recurse(0, current_node.clone(), current_node.clone(), &order);
+                let next_states = self.recurse(0, Cow::Borrowed(&current_node), Cow::Borrowed(&current_node), &order);
 
                 let next_states = if cfg!(feature = "conflict_fast") {
                     next_states
@@ -185,12 +246,12 @@ impl PetriNetwork {
         max
     }
 
-    fn recurse(&self, mut index: usize, state_in: Vec<u8>, state_out: Vec<u8>, order: &[usize]) -> Vec<Vec<u8>> {
+    fn recurse(&self, mut index: usize, state_in: Cow<Vec<u8>>, state_out: Cow<Vec<u8>>, order: &[usize]) -> Vec<Vec<u8>> {
         while index < self.nodes.len() && state_out[order[index]] == 0 {
             index += 1;
         }
         if index >= self.nodes.len() {
-            return vec![state_out];
+            return vec![state_out.into_owned()];
         }
 
         let mut transition_candidates = Vec::new();
@@ -214,19 +275,19 @@ impl PetriNetwork {
             feature = "conflict_fast",
             feature = "conflict_normal",
             feature = "conflict_slow"
-        ))) && transition_candidates.len() > 1{
+        ))) && transition_candidates.len() > 1 {
             panic!("Conflict found in network while no conflict strategy was chosen!");
         }
 
         let mut res = Vec::new();
 
         for transition in transition_candidates {
-            let mut new_state_in = state_in.clone();
-            let mut new_state_out = state_out.clone();
+            let mut new_state_in = state_in.clone().into_owned();
+            let mut new_state_out = state_out.clone().into_owned();
 
             self.transitions[transition].apply(&mut new_state_in, &mut new_state_out);
 
-            res.append(&mut self.recurse(index + 1, new_state_in, new_state_out, order));
+            res.append(&mut self.recurse(index + 1, Cow::Owned(new_state_in), Cow::Owned(new_state_out), order));
         }
 
         res
@@ -258,8 +319,8 @@ pub(crate) mod test {
         assert_eq!(
             network.recurse(
                 0,
-                network.nodes.clone(),
-                network.nodes.clone(),
+                Cow::Borrowed(&network.nodes),
+                Cow::Borrowed(&network.nodes),
                 &network.get_order()
             ).into_iter().collect::<HashSet<_>>(),
             expected.into_iter().collect::<HashSet<_>>()
