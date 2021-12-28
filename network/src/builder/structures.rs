@@ -16,6 +16,10 @@ impl Semaphore {
     pub fn v(&self) -> SemaphoreV {
         SemaphoreV(self.0)
     }
+
+    pub fn index(&self) -> usize {
+        self.0
+    }
 }
 
 impl TransitionMod for SemaphoreP {
