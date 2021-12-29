@@ -727,19 +727,19 @@ mod test {
         println!("{:?}", builder.groups);
 
         assert_eq!(builder.groups[0], Vec::<String>::new());
-        assert_eq!(builder.groups[1], vec!["M"]);
-        assert_eq!(builder.groups[2], vec!["M"]);
-        assert_eq!(builder.groups[3], vec!["M"]);
+        assert_eq!(builder.groups[1], vec!["M : Mutex"]);
+        assert_eq!(builder.groups[2], vec!["M : Mutex"]);
+        assert_eq!(builder.groups[3], vec!["M : Mutex"]);
         assert_eq!(builder.groups[4], Vec::<String>::new());
 
         let actual = builder.build();
 
         assert_eq!(actual, expected);
         assert!(actual.get_node(1).is_some());
-        assert_eq!(actual.get_node(1).unwrap().1.groups, vec!["M"]);
+        assert_eq!(actual.get_node(1).unwrap().1.groups, vec!["M : Mutex"]);
         assert!(actual.get_node(2).is_some());
-        assert_eq!(actual.get_node(2).unwrap().1.groups, vec!["M"]);
+        assert_eq!(actual.get_node(2).unwrap().1.groups, vec!["M : Mutex"]);
         assert!(actual.get_node(3).is_some());
-        assert_eq!(actual.get_node(3).unwrap().1.groups, vec!["M"]);
+        assert_eq!(actual.get_node(3).unwrap().1.groups, vec!["M : Mutex"]);
     }
 }

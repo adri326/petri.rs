@@ -66,9 +66,12 @@ fn main() -> Result<(), std::io::Error> {
     let end = builder.get_label("end").unwrap().as_node().unwrap();
 
     let network = builder.build();
-    let mut file = std::fs::File::create("target/exported.dot")?;
-    network.export_dot(&mut file);
-    println!("Successfully wrote network into `target/exported.dot`");
+    #[cfg(export_dot)]
+    {
+        let mut file = std::fs::File::create("target/exported.dot")?;
+        network.export_dot(&mut file);
+        println!("Successfully wrote network into `target/exported.dot`");
+    }
 
     let graph = network.generate_graph();
     graph.assert_always_reaches(|state| state[end] == 3);

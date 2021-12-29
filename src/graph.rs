@@ -3,6 +3,8 @@ use std::cmp::Ordering;
 use std::cell::RefCell;
 use std::borrow::Cow;
 
+#[cfg(feature = "export_dot")]
+use super::network::export_dot;
 // use crate::{
 //     PetriTransition,
 //     PetriNetwork,
@@ -238,6 +240,23 @@ impl PetriGraph {
             }
             panic!("Assertion error: not every node fulfills the condition");
         }
+    }
+
+    #[cfg(feature = "export_dot")]
+    pub fn export_dot<W: std::io::Write>(&self, writer: &mut W) {
+        let mut writer = dot_writer::DotWriter::from(writer);
+
+        export_dot::export_graph(self, &mut writer);
+    }
+
+    #[cfg(feature = "export_dot")]
+    pub fn get_dot_string(&self) -> String {
+        let mut vec = Vec::new();
+        let mut writer = dot_writer::DotWriter::from(&mut vec);
+
+        export_dot::export_graph(self, &mut writer);
+
+        String::from_utf8_lossy(&vec).into_owned()
     }
 }
 

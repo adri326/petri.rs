@@ -6,7 +6,7 @@ pub mod data;
 use data::PetriNodeData;
 
 #[cfg(feature = "export_dot")]
-mod export_dot;
+pub(crate) mod export_dot;
 
 // TODO: reimplement PartialEq
 #[derive(Clone, Debug)]

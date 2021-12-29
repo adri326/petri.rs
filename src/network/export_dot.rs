@@ -1,5 +1,7 @@
 use super::*;
 use dot_writer::*;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::Hasher;
 
 pub fn export_network(network: &PetriNetwork, writer: &mut DotWriter) {
     let mut digraph = writer.digraph();
@@ -30,17 +32,17 @@ pub fn export_network(network: &PetriNetwork, writer: &mut DotWriter) {
         }
     }
 
-    for (group_name, members) in groups {
-        let mut cluster = digraph.cluster();
-        cluster.set_label(&group_name);
-        cluster.set_style(Style::Filled);
-        for index in members.0 {
-            cluster.node_named(&format!("N{}", index));
-        }
-        for index in members.1 {
-            cluster.node_named(&format!("T{}", index));
-        }
-    }
+    // for (group_name, members) in groups {
+    //     let mut cluster = digraph.cluster();
+    //     cluster.set_label(&group_name);
+    //     cluster.set_style(Style::Filled);
+    //     for index in members.0 {
+    //         cluster.node_named(&format!("N{}", index));
+    //     }
+    //     for index in members.1 {
+    //         cluster.node_named(&format!("T{}", index));
+    //     }
+    // }
 
     for (index, &value) in network.nodes.iter().enumerate() {
         let data = &network.node_data[index];
@@ -84,6 +86,37 @@ pub fn export_network(network: &PetriNetwork, writer: &mut DotWriter) {
 
         for output in transition.outputs.iter() {
             digraph.edge(&name, &format!("N{}", output));
+        }
+    }
+}
+
+pub fn export_graph(graph: &PetriGraph, writer: &mut DotWriter) {
+    fn hash(state: &[u8]) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        for &x in state {
+            hasher.write_u8(x);
+        }
+        hasher.finish()
+    }
+    let mut digraph = writer.digraph();
+    digraph.set_font_size(14.0);
+    digraph.set("nodesep", "0.5", false);
+
+    for (state, _) in graph.iter() {
+        let mut node = digraph.node_named(&format!("S{:08x}", hash(state)));
+        let mut label = String::new();
+        for (i, &x) in state.iter().enumerate() {
+            if x > 0 {
+                label += &format!("{},", i);
+            }
+        }
+        node.set_label(&label[0..(label.len() - 1)]);
+    }
+
+    for (state, next_states) in graph.iter() {
+        let name = format!("S{:08x}", hash(state));
+        for next_state in next_states {
+            digraph.edge(&name, &format!("S{:08x}", hash(next_state)));
         }
     }
 }
