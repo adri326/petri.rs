@@ -2,10 +2,7 @@
 
 const EPSILON: f32 = 0.00001;
 
-use petri_network::{
-    PetriNetwork,
-    PetriTransition,
-};
+use petri_network::{PetriNetwork, PetriTransition};
 use rand::prelude::*;
 use std::collections::{HashSet, LinkedList};
 
@@ -215,7 +212,9 @@ impl<'a> PetriRenderer<'a> {
         let mut nodes_x = self.nodes_x.clone();
         for (index, current_x) in nodes_x.iter_mut().enumerate() {
             // ∂/∂x cost_x(index) ~= (cost_x(index, x+ε) - cost_x(index, x-ε)) / 2ε
-            let dx = (self.cost_x(index, *current_x + EPSILON) - self.cost_x(index, *current_x - EPSILON)) / (2.0 * EPSILON);
+            let dx = (self.cost_x(index, *current_x + EPSILON)
+                - self.cost_x(index, *current_x - EPSILON))
+                / (2.0 * EPSILON);
 
             // Gradient descent to find the minimum
             *current_x -= step_size * sigma(dx);
@@ -231,13 +230,19 @@ impl<'a> PetriRenderer<'a> {
         for transition in self.network.transitions().iter() {
             if transition.involves(index) {
                 for &input in transition.inputs.iter() {
-                    let delta_y = self.nodes_y[input].map(|input_y| self.nodes_y[index].map(|y| input_y - y)).flatten().unwrap_or(0);
+                    let delta_y = self.nodes_y[input]
+                        .map(|input_y| self.nodes_y[index].map(|y| input_y - y))
+                        .flatten()
+                        .unwrap_or(0);
                     let mult = if delta_y.abs() > 1 { 0.25 } else { 1.0 };
                     sum += mult * (self.nodes_x[input] - x) * (self.nodes_x[input] - x);
                 }
 
                 for &output in transition.outputs.iter() {
-                    let delta_y = self.nodes_y[output].map(|output_y| self.nodes_y[index].map(|y| output_y - y)).flatten().unwrap_or(0);
+                    let delta_y = self.nodes_y[output]
+                        .map(|output_y| self.nodes_y[index].map(|y| output_y - y))
+                        .flatten()
+                        .unwrap_or(0);
                     let mult = if delta_y.abs() > 1 { 0.25 } else { 1.0 };
                     sum += mult * (self.nodes_x[output] - x) * (self.nodes_x[output] - x);
                 }
@@ -293,13 +298,11 @@ mod test {
     fn test_nodes_y() {
         let mut builder = PetriBuilder::new();
         let start = builder.node_with_label(1, "start");
-        builder.begin_branch(start)
+        builder
+            .begin_branch(start)
             .step()
             .step_with_branch(|branch| {
-                branch
-                    .step()
-                    .join(["start"])
-                    .label("p1");
+                branch.step().join(["start"]).label("p1");
             })
             .step()
             .step()

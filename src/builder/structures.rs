@@ -46,7 +46,10 @@ pub struct MutexSection(usize, String);
 
 impl Mutex {
     pub fn new(builder: &mut PetriBuilder, value: u8, name: impl Into<String> + Clone) -> Self {
-        let mut res = Self(builder.node_with_label(value, format!("Mutex({})", name.clone().into())), name.into());
+        let res = Self(
+            builder.node_with_label(value, format!("Mutex({})", name.clone().into())),
+            name.into(),
+        );
         builder.add_group(res.0, format!("{} : Mutex", res.1));
         res
     }

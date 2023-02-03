@@ -1,12 +1,13 @@
-#[allow(unused_imports)]
-use petri_network::{PetriNetwork, PetriBuilder};
 use petri_network::builder::structures::Semaphore;
+#[allow(unused_imports)]
+use petri_network::{PetriBuilder, PetriNetwork};
 
 fn main() -> Result<(), std::io::Error> {
     let mut builder = PetriBuilder::new();
     let start = builder.node_with_label(1, "start");
     let semaphore = Semaphore::new(&mut builder, 1);
-    builder.begin_branch(start)
+    builder
+        .begin_branch(start)
         .step()
         .step_with_branch(|branch| {
             branch

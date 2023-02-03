@@ -1,7 +1,7 @@
-use std::collections::{HashMap, HashSet};
-use std::cmp::Ordering;
-use std::cell::RefCell;
 use std::borrow::Cow;
+use std::cell::RefCell;
+use std::cmp::Ordering;
+use std::collections::{HashMap, HashSet};
 
 #[cfg(feature = "export_dot")]
 use super::network::export_dot;
@@ -41,7 +41,7 @@ impl PetriGraph {
     #[inline]
     pub fn with_transpose<F, T>(&self, state: &Vec<u8>, fn_with: F) -> Option<T>
     where
-        F: for<'c> FnOnce(&'c HashSet<Vec<u8>>) -> T
+        F: for<'c> FnOnce(&'c HashSet<Vec<u8>>) -> T,
     {
         self.calculate_transpose();
 
@@ -114,7 +114,7 @@ impl PetriGraph {
     /// Returns the greatest set `S ⊂ self` such that `∀ node ∈ S`, `∃ state ∈ self` such that `condition(state)` and `node ->> state`
     pub fn reaches<'b, F>(&'b self, condition: F) -> HashSet<Cow<'b, Vec<u8>>>
     where
-        F: for<'c> Fn(&'c Vec<u8>) -> bool
+        F: for<'c> Fn(&'c Vec<u8>) -> bool,
     {
         let mut hash_set = HashSet::with_capacity(self.map.len());
         let mut stack = Vec::new();
@@ -136,9 +136,16 @@ impl PetriGraph {
         self.calculate_transpose();
 
         if let Ok(ref transpose) = self.transpose.try_borrow() {
-            let transpose = transpose.as_ref().expect("PetriGraph::calculate_transpose did not set PetriGraph::transpose to Some(...)");
+            let transpose = transpose.as_ref().expect(
+                "PetriGraph::calculate_transpose did not set PetriGraph::transpose to Some(...)",
+            );
             while let Some(current_node) = stack.pop() {
-                for antecedent in transpose.get(current_node).iter().map(|x| x.iter()).flatten() {
+                for antecedent in transpose
+                    .get(current_node)
+                    .iter()
+                    .map(|x| x.iter())
+                    .flatten()
+                {
                     if !hash_set.contains(antecedent) {
                         hash_set.insert(Cow::Owned(antecedent.clone()));
                         stack.push(antecedent);
@@ -155,10 +162,14 @@ impl PetriGraph {
     /// Returns true if `∀ node ∈ self`, `∃ state ∈ self` such that `condition(state)` and `node ->> state`
     pub fn always_reaches<'b, F>(&'b self, condition: F) -> bool
     where
-        F: for<'c> Fn(&'c Vec<u8>) -> bool
+        F: for<'c> Fn(&'c Vec<u8>) -> bool,
     {
         let actual = self.reaches(condition);
-        let expected = self.map.iter().map(|(k, _)| Cow::Borrowed(k)).collect::<HashSet<_>>();
+        let expected = self
+            .map
+            .iter()
+            .map(|(k, _)| Cow::Borrowed(k))
+            .collect::<HashSet<_>>();
 
         actual == expected
     }
@@ -166,15 +177,30 @@ impl PetriGraph {
     /// Does the same as `assert!(graph.always_reaches(condition))`, but prints a more helpful error if the assertion fails.
     pub fn assert_always_reaches<'b, F>(&'b self, condition: F)
     where
-        F: for<'c> Fn(&'c Vec<u8>) -> bool + Copy
+        F: for<'c> Fn(&'c Vec<u8>) -> bool + Copy,
     {
         let actual = self.reaches(condition);
-        let expected = self.map.iter().map(|(k, _)| Cow::Borrowed(k)).collect::<HashSet<_>>();
+        let expected = self
+            .map
+            .iter()
+            .map(|(k, _)| Cow::Borrowed(k))
+            .collect::<HashSet<_>>();
 
         if actual != expected {
-            let expected = expected.iter().map(|cow| cow.as_ref()).collect::<HashSet<_>>();
-            let actual = actual.iter().map(|cow| cow.as_ref()).collect::<HashSet<_>>();
-            let base = self.map.iter().map(|(k, _)| k).filter(|k| (condition)(k)).collect::<HashSet<_>>();
+            let expected = expected
+                .iter()
+                .map(|cow| cow.as_ref())
+                .collect::<HashSet<_>>();
+            let actual = actual
+                .iter()
+                .map(|cow| cow.as_ref())
+                .collect::<HashSet<_>>();
+            let base = self
+                .map
+                .iter()
+                .map(|(k, _)| k)
+                .filter(|k| (condition)(k))
+                .collect::<HashSet<_>>();
 
             eprintln!("Info: Expected set of nodes:");
             for node in expected.iter() {
@@ -206,7 +232,7 @@ impl PetriGraph {
 
     pub fn forall<'b, F>(&'b self, condition: F) -> bool
     where
-        F: for<'c> Fn(&'c Vec<u8>) -> bool + Copy
+        F: for<'c> Fn(&'c Vec<u8>) -> bool + Copy,
     {
         for (node, _) in self.map.iter() {
             if !(condition)(node) {
@@ -219,7 +245,7 @@ impl PetriGraph {
 
     pub fn assert_forall<'b, F>(&'b self, condition: F)
     where
-        F: for<'c> Fn(&'c Vec<u8>) -> bool + Copy
+        F: for<'c> Fn(&'c Vec<u8>) -> bool + Copy,
     {
         let mut errors = HashSet::new();
 
@@ -260,7 +286,7 @@ impl PetriGraph {
     }
 }
 
-impl<T: IntoIterator<Item=Vec<u8>>, const N: usize> From<[(Vec<u8>, T); N]> for PetriGraph {
+impl<T: IntoIterator<Item = Vec<u8>>, const N: usize> From<[(Vec<u8>, T); N]> for PetriGraph {
     fn from(iter: [(Vec<u8>, T); N]) -> Self {
         let iter = iter.into_iter().map(|(k, n)| (k, n.into_iter().collect()));
         Self {
@@ -270,8 +296,8 @@ impl<T: IntoIterator<Item=Vec<u8>>, const N: usize> From<[(Vec<u8>, T); N]> for 
     }
 }
 
-impl<T: IntoIterator<Item=Vec<u8>>> FromIterator<(Vec<u8>, T)> for PetriGraph {
-    fn from_iter<U: IntoIterator<Item=(Vec<u8>, T)>>(iter: U) -> Self {
+impl<T: IntoIterator<Item = Vec<u8>>> FromIterator<(Vec<u8>, T)> for PetriGraph {
+    fn from_iter<U: IntoIterator<Item = (Vec<u8>, T)>>(iter: U) -> Self {
         let iter = iter.into_iter().map(|(k, n)| (k, n.into_iter().collect()));
         Self {
             map: iter.collect(),
@@ -361,7 +387,7 @@ impl PartialOrd for PetriGraph {
             (true, true) => Some(Ordering::Equal),
             (true, false) => Some(Ordering::Less), // self ⊂ other -> self <= other
             (false, true) => Some(Ordering::Greater), // other ⊂ self -> self >= other
-            (false, false) => None
+            (false, false) => None,
         }
     }
 }
@@ -408,20 +434,14 @@ impl std::fmt::Debug for PetriGraph {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{
-        PetriTransition,
-        PetriNetwork,
-        network::test::test_recurse,
-    };
+    use crate::{network::test::test_recurse, PetriNetwork, PetriTransition};
 
     #[test]
     fn test_generate_graph() {
         let mut network = PetriNetwork {
             nodes: vec![1, 0],
             node_data: vec![Default::default(); 2],
-            transitions: vec![
-                PetriTransition::new(vec![0], vec![1], vec![]),
-            ]
+            transitions: vec![PetriTransition::new(vec![0], vec![1], vec![])],
         };
 
         test_recurse(&network, vec![vec![0, 1]]);
@@ -455,7 +475,7 @@ mod test {
             transitions: vec![
                 PetriTransition::new(vec![0], vec![1], vec![]),
                 PetriTransition::new(vec![1], vec![2], vec![]),
-            ]
+            ],
         };
 
         network.nodes[2] = 1;
@@ -489,17 +509,15 @@ mod test {
         let network = PetriNetwork::new(
             vec![1, 0],
             vec![Default::default(); 2],
-            vec![
-                PetriTransition::new(vec![0], vec![1], vec![]),
-            ]
+            vec![PetriTransition::new(vec![0], vec![1], vec![])],
         );
 
         assert_eq!(network.step(), vec![vec![0, 1]]);
 
-        assert_eq!(network.generate_graph(), PetriGraph::from([
-            (vec![1, 0], [vec![0, 1]]),
-            (vec![0, 1], [vec![0, 1]]),
-        ]));
+        assert_eq!(
+            network.generate_graph(),
+            PetriGraph::from([(vec![1, 0], [vec![0, 1]]), (vec![0, 1], [vec![0, 1]]),])
+        );
     }
 
     #[test]
@@ -512,7 +530,7 @@ mod test {
                 PetriTransition::new(vec![1], vec![3], vec![]),
                 PetriTransition::new(vec![3], vec![4], vec![]),
                 PetriTransition::new(vec![2, 4], vec![5], vec![]),
-            ]
+            ],
         );
 
         let graph = network.generate_graph();
@@ -545,7 +563,7 @@ mod test {
                 PetriTransition::new(vec![1], vec![3], vec![]),
                 PetriTransition::new(vec![3], vec![4], vec![]),
                 PetriTransition::new(vec![2, 4], vec![5], vec![]),
-            ]
+            ],
         );
 
         let graph = network.generate_graph();
@@ -572,7 +590,7 @@ mod test {
                 PetriTransition::new(vec![0], vec![1], vec![]),
                 PetriTransition::new(vec![1], vec![2], vec![]),
                 PetriTransition::new(vec![1], vec![3], vec![]),
-            ]
+            ],
         );
 
         test_recurse(&network, vec![vec![0; 4]]);
@@ -590,11 +608,14 @@ mod test {
         network.set_node(0, 1, Default::default());
         let graph = network.generate_graph();
 
-        assert_eq!(graph, PetriGraph::from([
-            (vec![1, 0, 0, 0], vec![vec![0, 1, 0, 0]]),
-            (vec![0, 1, 0, 0], vec![vec![0, 0, 1, 0], vec![0, 0, 0, 1]]),
-            (vec![0, 0, 1, 0], vec![vec![0, 0, 1, 0]]),
-            (vec![0, 0, 0, 1], vec![vec![0, 0, 0, 1]]),
-        ]));
+        assert_eq!(
+            graph,
+            PetriGraph::from([
+                (vec![1, 0, 0, 0], vec![vec![0, 1, 0, 0]]),
+                (vec![0, 1, 0, 0], vec![vec![0, 0, 1, 0], vec![0, 0, 0, 1]]),
+                (vec![0, 0, 1, 0], vec![vec![0, 0, 1, 0]]),
+                (vec![0, 0, 0, 1], vec![vec![0, 0, 0, 1]]),
+            ])
+        );
     }
 }

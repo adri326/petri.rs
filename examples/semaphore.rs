@@ -1,6 +1,6 @@
+use petri_network::builder::structures::{Group, Mutex, Semaphore};
 #[allow(unused_imports)]
-use petri_network::{PetriNetwork, PetriBuilder};
-use petri_network::builder::structures::{Semaphore, Mutex, Group};
+use petri_network::{PetriBuilder, PetriNetwork};
 
 fn main() -> Result<(), std::io::Error> {
     let mut builder = PetriBuilder::new();
@@ -17,7 +17,8 @@ fn main() -> Result<(), std::io::Error> {
     let coiffeur_group = Group::new("Coiffeur");
 
     // Process "Coiffeur":
-    builder.begin_branch(coiffeur)
+    builder
+        .begin_branch(coiffeur)
         .with_mod(coiffeur_group.clone())
         .step_with_mod(wake_coiffeur.p())
         .step()
@@ -26,7 +27,8 @@ fn main() -> Result<(), std::io::Error> {
         .goto("coiffeur");
 
     // Process "Client"
-    builder.begin_branch(start)
+    builder
+        .begin_branch(start)
         .step_with_mod(counter_mutex.p())
         .with_mod(counter_mutex.section())
         .step()

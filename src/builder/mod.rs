@@ -1,4 +1,4 @@
-use crate::{PetriNetwork, PetriTransition, PetriNodeData};
+use crate::{PetriNetwork, PetriNodeData, PetriTransition};
 use std::collections::HashMap;
 
 pub mod structures;
@@ -51,7 +51,7 @@ pub trait BuilderModClone {
 
 impl<T> BuilderModClone for T
 where
-    T: Clone + BuilderMod + 'static
+    T: Clone + BuilderMod + 'static,
 {
     fn clone_box(&self) -> Box<dyn BuilderMod + 'static> {
         Box::new(self.clone())
@@ -110,7 +110,8 @@ impl PetriBuilder {
 
     pub fn transition(&mut self, inputs: Vec<usize>, outputs: Vec<usize>) -> usize {
         let res = self.transitions.len();
-        self.transitions.push(PetriTransition::new(inputs, outputs, vec![]));
+        self.transitions
+            .push(PetriTransition::new(inputs, outputs, vec![]));
         res
     }
 
@@ -133,23 +134,27 @@ impl PetriBuilder {
     }
 
     fn build_data(&self) -> Vec<PetriNodeData> {
-        self.nodes.iter().enumerate().map(|(index, _node)| {
-            let mut label = None;
-            for (name, i) in self.labels.iter() {
-                if *i == Label::Node(index) {
-                    label = Some(name.clone());
+        self.nodes
+            .iter()
+            .enumerate()
+            .map(|(index, _node)| {
+                let mut label = None;
+                for (name, i) in self.labels.iter() {
+                    if *i == Label::Node(index) {
+                        label = Some(name.clone());
+                    }
                 }
-            }
 
-            let groups = self.groups.get(index).cloned().unwrap_or(Vec::new());
-            let max_value = None;
+                let groups = self.groups.get(index).cloned().unwrap_or(Vec::new());
+                let max_value = None;
 
-            PetriNodeData {
-                label,
-                groups,
-                max_value,
-            }
-        }).collect()
+                PetriNodeData {
+                    label,
+                    groups,
+                    max_value,
+                }
+            })
+            .collect()
     }
 
     pub fn build(mut self) -> PetriNetwork {
@@ -157,7 +162,7 @@ impl PetriBuilder {
             match index {
                 Label::Transition(index) => {
                     self.transitions[*index].label(name.to_string());
-                },
+                }
                 _ => {}
             }
         }
@@ -379,7 +384,10 @@ impl<'a> PetriBranchBuilder<'a> {
         for input in input_nodes {
             transition = transition.input(input);
         }
-        transition.output(next_node).with_mods(&self.modifiers).build();
+        transition
+            .output(next_node)
+            .with_mods(&self.modifiers)
+            .build();
 
         self.current_node = next_node;
 
@@ -397,7 +405,8 @@ impl<'a> PetriBranchBuilder<'a> {
                 .unwrap()
                 .as_node()
                 .unwrap();
-            self.builder.begin_transition()
+            self.builder
+                .begin_transition()
                 .input(input_node)
                 .output(next_node)
                 .with_mods(&self.modifiers)
@@ -409,9 +418,15 @@ impl<'a> PetriBranchBuilder<'a> {
     }
 
     pub fn step_with_goto(mut self, goto_handle: impl AsRef<str>) -> Self {
-        let goto_node = self.builder.get_label(goto_handle.as_ref()).unwrap().as_node().unwrap();
+        let goto_node = self
+            .builder
+            .get_label(goto_handle.as_ref())
+            .unwrap()
+            .as_node()
+            .unwrap();
         let next_node = self.node(0);
-        self.builder.begin_transition()
+        self.builder
+            .begin_transition()
             .input(self.current_node)
             .output(goto_node)
             .output(next_node)
@@ -423,8 +438,14 @@ impl<'a> PetriBranchBuilder<'a> {
     }
 
     pub fn goto(mut self, goto_handle: impl AsRef<str>) -> Self {
-        let goto_node = self.builder.get_label(goto_handle.as_ref()).unwrap().as_node().unwrap();
-        self.builder.begin_transition()
+        let goto_node = self
+            .builder
+            .get_label(goto_handle.as_ref())
+            .unwrap()
+            .as_node()
+            .unwrap();
+        self.builder
+            .begin_transition()
             .input(self.current_node)
             .output(goto_node)
             .with_mods(&self.modifiers)
@@ -435,11 +456,20 @@ impl<'a> PetriBranchBuilder<'a> {
     }
 
     pub fn goto_branch<S: AsRef<str>>(mut self, goto_handles: impl IntoIterator<Item = S>) -> Self {
-        let output_nodes = goto_handles.into_iter()
-            .map(|label| self.builder.get_label(label.as_ref()).unwrap().as_node().unwrap()).collect::<Vec<_>>();
+        let output_nodes = goto_handles
+            .into_iter()
+            .map(|label| {
+                self.builder
+                    .get_label(label.as_ref())
+                    .unwrap()
+                    .as_node()
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
         assert!(output_nodes.len() > 0);
         let next_node = output_nodes[0];
-        self.builder.begin_transition()
+        self.builder
+            .begin_transition()
             .input(self.current_node)
             .outputs(output_nodes)
             .with_mods(&self.modifiers)
@@ -462,16 +492,28 @@ impl<'a> PetriBranchBuilder<'a> {
     }
 
     /// TODO: replace S with a Condition enum
-    pub fn step_with_condition<S: AsRef<str>>(mut self, conditions: impl IntoIterator<Item = S>) -> Self {
-        let conditions = conditions.into_iter()
-            .map(|label| self.builder.get_label(label.as_ref()).unwrap().as_node().unwrap()).collect::<Vec<_>>();
+    pub fn step_with_condition<S: AsRef<str>>(
+        mut self,
+        conditions: impl IntoIterator<Item = S>,
+    ) -> Self {
+        let conditions = conditions
+            .into_iter()
+            .map(|label| {
+                self.builder
+                    .get_label(label.as_ref())
+                    .unwrap()
+                    .as_node()
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
         let mut input_nodes = conditions.clone();
         input_nodes.push(self.current_node);
         let next_node = self.node(0);
         let mut output_nodes = conditions;
         output_nodes.push(next_node);
 
-        self.builder.begin_transition()
+        self.builder
+            .begin_transition()
             .inputs(input_nodes)
             .outputs(output_nodes)
             .with_mods(&self.modifiers);
@@ -710,14 +752,15 @@ mod test {
                 PetriTransition::new(vec![0, 1], vec![2], vec![]),
                 PetriTransition::new(vec![2], vec![3], vec![]),
                 PetriTransition::new(vec![3], vec![4, 1], vec![]),
-            ]
+            ],
         };
 
         let mut builder = PetriBuilder::new();
         let start = builder.node(2);
         let mutex = structures::Mutex::new(&mut builder, 0, "M");
 
-        builder.begin_branch(start)
+        builder
+            .begin_branch(start)
             .step_with_mod(mutex.p())
             .with_mod(mutex.section())
             .step()

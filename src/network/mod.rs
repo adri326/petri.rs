@@ -1,6 +1,6 @@
-use std::collections::{HashMap, HashSet};
-use std::borrow::Cow;
 use crate::graph::PetriGraph;
+use std::borrow::Cow;
+use std::collections::{HashMap, HashSet};
 
 pub mod data;
 use data::PetriNodeData;
@@ -85,25 +85,29 @@ impl PetriTransition {
 
 impl PartialEq for PetriTransition {
     fn eq(&self, other: &Self) -> bool {
-        self.inputs == other.inputs
-        && self.outputs == other.outputs
+        self.inputs == other.inputs && self.outputs == other.outputs
     }
 }
 
 impl Eq for PetriTransition {}
 
 impl PetriNetwork {
-    pub fn new(nodes: Vec<u8>, node_data: Vec<PetriNodeData>, transitions: Vec<PetriTransition>) -> Self {
+    pub fn new(
+        nodes: Vec<u8>,
+        node_data: Vec<PetriNodeData>,
+        transitions: Vec<PetriTransition>,
+    ) -> Self {
         let mut res = Self {
             nodes,
             node_data,
-            transitions
+            transitions,
         };
         let max_index = res.max_index();
         if res.nodes.len() <= max_index {
             res.nodes.resize(max_index, 0);
         }
-        res.node_data.resize(res.nodes.len(), PetriNodeData::default());
+        res.node_data
+            .resize(res.nodes.len(), PetriNodeData::default());
         res
     }
 
@@ -120,10 +124,7 @@ impl PetriNetwork {
         if self.nodes.len() <= index {
             None
         } else {
-            Some((
-                self.nodes[index],
-                &self.node_data[index],
-            ))
+            Some((self.nodes[index], &self.node_data[index]))
         }
     }
 
@@ -145,7 +146,10 @@ impl PetriNetwork {
 
     /// This method is unsafe because it might break the class invariants.
     /// You should call `uphold_invariants` to avoid bugs.
-    pub unsafe fn get_transition_mut<'b>(&'b mut self, index: usize) -> Option<&'b mut PetriTransition> {
+    pub unsafe fn get_transition_mut<'b>(
+        &'b mut self,
+        index: usize,
+    ) -> Option<&'b mut PetriTransition> {
         self.transitions.get_mut(index)
     }
 
@@ -162,7 +166,7 @@ impl PetriNetwork {
     /// It has an additional overhead, so you should use `PetriBuilder` and make changes there first.
     pub fn with_transition_mut<F, T: Copy>(&mut self, index: usize, callback: F) -> Option<T>
     where
-        F: for<'c> FnOnce(&'c mut PetriTransition) -> T
+        F: for<'c> FnOnce(&'c mut PetriTransition) -> T,
     {
         match self.transitions.get_mut(index) {
             Some(ref mut transition) => {
@@ -204,13 +208,21 @@ impl PetriNetwork {
     }
 
     pub fn step(&self) -> Vec<Vec<u8>> {
-        let res = self.recurse(0, Cow::Borrowed(&self.nodes), Cow::Borrowed(&self.nodes), &self.get_order());
+        let res = self.recurse(
+            0,
+            Cow::Borrowed(&self.nodes),
+            Cow::Borrowed(&self.nodes),
+            &self.get_order(),
+        );
 
         if cfg!(feature = "conflict_fast") {
             res
         } else {
             // Deduplicate output (TODO: do this in `recurse`?)
-            res.into_iter().collect::<HashSet<_>>().into_iter().collect::<Vec<_>>()
+            res.into_iter()
+                .collect::<HashSet<_>>()
+                .into_iter()
+                .collect::<Vec<_>>()
         }
     }
 
@@ -242,12 +254,21 @@ impl PetriNetwork {
             if map.get(&current_node).is_none() {
                 let mut hashset = HashSet::new();
 
-                let next_states = self.recurse(0, Cow::Borrowed(&current_node), Cow::Borrowed(&current_node), &order);
+                let next_states = self.recurse(
+                    0,
+                    Cow::Borrowed(&current_node),
+                    Cow::Borrowed(&current_node),
+                    &order,
+                );
 
                 let next_states = if cfg!(feature = "conflict_fast") {
                     next_states
                 } else {
-                    next_states.into_iter().collect::<HashSet<_>>().into_iter().collect::<Vec<_>>()
+                    next_states
+                        .into_iter()
+                        .collect::<HashSet<_>>()
+                        .into_iter()
+                        .collect::<Vec<_>>()
                 };
 
                 for next_state in next_states {
@@ -282,7 +303,13 @@ impl PetriNetwork {
         max
     }
 
-    fn recurse(&self, mut index: usize, state_in: Cow<Vec<u8>>, state_out: Cow<Vec<u8>>, order: &[usize]) -> Vec<Vec<u8>> {
+    fn recurse(
+        &self,
+        mut index: usize,
+        state_in: Cow<Vec<u8>>,
+        state_out: Cow<Vec<u8>>,
+        order: &[usize],
+    ) -> Vec<Vec<u8>> {
         while index < self.nodes.len() && state_out[order[index]] == 0 {
             index += 1;
         }
@@ -311,7 +338,8 @@ impl PetriNetwork {
             feature = "conflict_fast",
             feature = "conflict_normal",
             feature = "conflict_slow"
-        ))) && transition_candidates.len() > 1 {
+        ))) && transition_candidates.len() > 1
+        {
             panic!("Conflict found in network while no conflict strategy was chosen!");
         }
 
@@ -323,7 +351,12 @@ impl PetriNetwork {
 
             self.transitions[transition].apply(&mut new_state_in, &mut new_state_out);
 
-            res.append(&mut self.recurse(index + 1, Cow::Owned(new_state_in), Cow::Owned(new_state_out), order));
+            res.append(&mut self.recurse(
+                index + 1,
+                Cow::Owned(new_state_in),
+                Cow::Owned(new_state_out),
+                order,
+            ));
         }
 
         res
@@ -353,12 +386,15 @@ pub(crate) mod test {
 
     pub(crate) fn test_recurse(network: &PetriNetwork, expected: Vec<Vec<u8>>) {
         assert_eq!(
-            network.recurse(
-                0,
-                Cow::Borrowed(&network.nodes),
-                Cow::Borrowed(&network.nodes),
-                &network.get_order()
-            ).into_iter().collect::<HashSet<_>>(),
+            network
+                .recurse(
+                    0,
+                    Cow::Borrowed(&network.nodes),
+                    Cow::Borrowed(&network.nodes),
+                    &network.get_order()
+                )
+                .into_iter()
+                .collect::<HashSet<_>>(),
             expected.into_iter().collect::<HashSet<_>>()
         );
     }
@@ -368,7 +404,7 @@ pub(crate) mod test {
         let mut network = PetriNetwork {
             nodes: vec![0, 0],
             node_data: vec![Default::default(); 2],
-            transitions: vec![]
+            transitions: vec![],
         };
 
         test_recurse(&network, vec![vec![0, 0]]);
@@ -377,7 +413,9 @@ pub(crate) mod test {
 
         test_recurse(&network, vec![vec![1, 0]]);
 
-        network.transitions.push(PetriTransition::new(vec![0], vec![1], vec![]));
+        network
+            .transitions
+            .push(PetriTransition::new(vec![0], vec![1], vec![]));
 
         test_recurse(&network, vec![vec![0, 1]]);
 
@@ -394,7 +432,7 @@ pub(crate) mod test {
             transitions: vec![
                 PetriTransition::new(vec![0], vec![1], vec![]),
                 PetriTransition::new(vec![2], vec![3], vec![]),
-            ]
+            ],
         };
 
         network.nodes[0] = 1;
@@ -402,7 +440,9 @@ pub(crate) mod test {
 
         test_recurse(&network, vec![vec![0, 1, 0, 1]]);
 
-        network.transitions.push(PetriTransition::new(vec![1], vec![2], vec![]));
+        network
+            .transitions
+            .push(PetriTransition::new(vec![1], vec![2], vec![]));
 
         test_recurse(&network, vec![vec![0, 1, 0, 1]]);
     }
@@ -417,15 +457,12 @@ pub(crate) mod test {
                 PetriTransition::new(vec![0], vec![2], vec![]),
                 PetriTransition::new(vec![1], vec![0], vec![]),
                 PetriTransition::new(vec![2], vec![0], vec![]),
-            ]
+            ],
         };
 
         network.nodes[0] = 1;
 
-        test_recurse(&network, vec![
-            vec![0, 1, 0],
-            vec![0, 0, 1],
-        ]);
+        test_recurse(&network, vec![vec![0, 1, 0], vec![0, 0, 1]]);
     }
 
     #[test]
@@ -433,9 +470,7 @@ pub(crate) mod test {
         let mut network = PetriNetwork {
             nodes: vec![1, 1, 0],
             node_data: vec![Default::default(); 3],
-            transitions: vec![
-                PetriTransition::new(vec![0, 1], vec![2], vec![]),
-            ]
+            transitions: vec![PetriTransition::new(vec![0, 1], vec![2], vec![])],
         };
 
         test_recurse(&network, vec![vec![0, 0, 1]]);
@@ -457,19 +492,13 @@ pub(crate) mod test {
             transitions: vec![
                 PetriTransition::new(vec![0, 1], vec![3], vec![]),
                 PetriTransition::new(vec![1, 2], vec![3], vec![]),
-            ]
+            ],
         };
 
-        test_recurse(&network, vec![
-            vec![0, 0, 1, 1],
-            vec![1, 0, 0, 1],
-        ]);
+        test_recurse(&network, vec![vec![0, 0, 1, 1], vec![1, 0, 0, 1]]);
 
         network.transitions.reverse();
 
-        test_recurse(&network, vec![
-            vec![0, 0, 1, 1],
-            vec![1, 0, 0, 1],
-        ]);
+        test_recurse(&network, vec![vec![0, 0, 1, 1], vec![1, 0, 0, 1]]);
     }
 }
