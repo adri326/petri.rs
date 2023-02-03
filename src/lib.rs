@@ -2,17 +2,12 @@ mod graph;
 pub use graph::PetriGraph;
 
 mod network;
-pub use network::{
-    PetriNetwork,
-    PetriTransition,
-    data::PetriNodeData,
-};
+pub use network::{data::PetriNodeData, PetriNetwork, PetriTransition};
 
 pub mod builder;
-pub use builder::{
-    PetriBuilder,
-    PetriTransitionBuilder,
-};
+pub use builder::{PetriBuilder, PetriTransitionBuilder};
+
+pub mod parser;
 
 #[cfg(any(
     all(feature = "conflict_fast", feature = "conflict_normal"),
