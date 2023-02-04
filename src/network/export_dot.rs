@@ -105,7 +105,9 @@ pub fn export_graph(
     }
     let mut digraph = writer.digraph();
     digraph.set_font_size(14.0);
-    digraph.set("nodesep", "0.5", false);
+    digraph.set("nodesep", "0.2", false);
+    digraph.set("bgcolor", "#202020", true);
+    digraph.edge_attributes().set("color", "#a0a0a080", true);
 
     for (state, _) in graph.iter() {
         let mut node = digraph.node_named(&format!("S{:08x}", hash(state)));

@@ -1,10 +1,12 @@
-Semaphore = 8
-Pool = 11
+Semaphore = 4
+Pool = 8
 
 Pool -> Pool
 Pool -> Pool_begin
 
-{ Semaphore, Pool_begin } -> A_begin
+{ Semaphore, Pool_begin } -> A_before
+A_before -> A_before
+A_before -> A_begin
 { A_begin, Semaphore } -> OP1_begin
 OP1_begin -> OP1_begin
 OP1_begin -> OP1_end

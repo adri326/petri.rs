@@ -269,6 +269,38 @@ impl PetriGraph {
         }
     }
 
+    pub fn final_nodes<'b>(&'b self) -> impl Iterator<Item=&'b Vec<u8>> + 'b {
+        self.map.iter().filter_map(|(key, values)| {
+            if values.len() == 0 || values.len() == 1 && values.contains(key) {
+                Some(key)
+            } else {
+                None
+            }
+        })
+    }
+
+    pub fn subgraph(&self, node: &[u8]) -> PetriGraph {
+        let mut map = HashMap::with_capacity(self.map.len());
+
+        let mut open = vec![Vec::from(node)];
+
+        while let Some(state) = open.pop() {
+            if map.contains_key(&state) {
+                continue
+            }
+
+            let next_states = self.map.get(&state).unwrap();
+
+            for next_state in next_states {
+                open.push(next_state.clone());
+            }
+
+            map.insert(state, next_states.clone());
+        }
+
+        PetriGraph { map, transpose: RefCell::new(None) }
+    }
+
     pub fn export_dot<W: std::io::Write>(
         &self,
         writer: &mut W,

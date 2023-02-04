@@ -1,0 +1,9 @@
+Start_L = 4
+Start_R = 4
+Semaphore = 1
+
+{Start_L Semaphore} -> Middle_L
+Middle_L -> {Semaphore End_L}
+
+{Start_R Semaphore} -> Middle_R
+Middle_R -> {Semaphore End_R}
