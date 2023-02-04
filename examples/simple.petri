@@ -1,5 +1,5 @@
-Semaphore = 4
-Pool = 4
+Semaphore = 8
+Pool = 11
 
 Pool -> Pool
 Pool -> Pool_begin

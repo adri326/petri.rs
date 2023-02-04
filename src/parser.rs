@@ -188,7 +188,7 @@ fn get_node_data(indices: &HashMap<String, usize>) -> Vec<PetriNodeData> {
         }
     }
 
-    dbg!(res)
+    res
 }
 
 #[cfg(test)]

@@ -545,6 +545,8 @@ impl Label {
 
 #[cfg(test)]
 mod test {
+    use crate::simulator::RecursiveBrancher;
+
     use super::*;
 
     #[test]
@@ -651,8 +653,8 @@ mod test {
 
         let second = builder.build();
 
-        let graph = actual.generate_graph();
-        let second_graph = second.generate_graph();
+        let graph = actual.generate_graph::<RecursiveBrancher>();
+        let second_graph = second.generate_graph::<RecursiveBrancher>();
         // Verify that mid_a + mid_b ≤ 1 at all point in time
         graph.assert_forall(|state| state[mid_a] + state[mid_b] <= 1);
         second_graph.assert_forall(|state| state[s_mid_a] + state[s_mid_b] <= 1);
@@ -694,7 +696,7 @@ mod test {
 
         assert_eq!(actual, expected);
 
-        let graph = actual.generate_graph();
+        let graph = actual.generate_graph::<RecursiveBrancher>();
         graph.assert_always_reaches(|state| state[end] == 1);
     }
 
@@ -733,7 +735,7 @@ mod test {
 
         assert_eq!(actual, expected);
 
-        let graph = actual.generate_graph();
+        let graph = actual.generate_graph::<RecursiveBrancher>();
         graph.assert_always_reaches(|state| state[end] == 1);
     }
 

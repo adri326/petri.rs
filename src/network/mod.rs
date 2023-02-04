@@ -1,5 +1,5 @@
 use crate::graph::PetriGraph;
-use std::borrow::Cow;
+use crate::simulator::Simulator;
 use std::collections::{HashMap, HashSet};
 
 pub mod data;
@@ -63,7 +63,7 @@ impl PetriTransition {
         false
     }
 
-    fn is_active(&self, nodes: &Vec<u8>) -> bool {
+    pub fn is_active(&self, nodes: &[u8]) -> bool {
         let mut active = true;
         for &input in self.inputs.iter() {
             active = active && nodes[input] > 0;
@@ -71,13 +71,20 @@ impl PetriTransition {
         active
     }
 
-    fn apply(&self, state_in: &mut Vec<u8>, state_out: &mut Vec<u8>) {
+    pub fn apply(&self, state: &mut [u8]) {
+        self.apply_inputs(state);
+        self.apply_outputs(state);
+    }
+
+    pub fn apply_inputs(&self, state: &mut [u8]) {
         for &input in self.inputs.iter() {
-            state_in[input] -= 1;
-            state_out[input] -= 1;
+            state[input] -= 1;
         }
+    }
+
+    pub fn apply_outputs(&self, state: &mut [u8]) {
         for &output in self.outputs.iter() {
-            state_out[output] += 1;
+            state[output] += 1;
         }
     }
 }
@@ -206,47 +213,16 @@ impl PetriNetwork {
         self.transitions.push(transition);
     }
 
-    pub fn step(&self) -> Vec<Vec<u8>> {
-        let res = self.get_next_states(&self.nodes);
-
-        // Deduplicate output (TODO: do this in `recurse`?)
-        res.into_iter()
-            .collect::<HashSet<_>>()
-            .into_iter()
-            .collect::<Vec<_>>()
-    }
-
-    fn get_order(&self) -> Vec<usize> {
-        // TODO: memoize?
-        let mut order = (0..self.nodes.len()).collect::<Vec<_>>();
-        let mut weights = vec![0usize; self.nodes.len()];
-        for transition in self.transitions.iter() {
-            for input in transition.inputs.iter() {
-                weights[*input] += 1;
-            }
-        }
-
-        order.sort_unstable_by_key(|&i| weights[i]);
-        order.reverse();
-
-        order
-    }
-
-    pub fn generate_graph(&self) -> PetriGraph {
+    pub fn generate_graph<'b, S: Simulator<'b>>(&'b self) -> PetriGraph {
         let mut map: HashMap<Vec<u8>, HashSet<Vec<u8>>> = HashMap::new();
+        let simulator = S::init(self);
 
         let mut stack = vec![self.nodes.clone()];
         while let Some(current_node) = stack.pop() {
             if map.get(&current_node).is_none() {
                 let mut hashset = HashSet::new();
 
-                let next_states = self.get_next_states(&current_node);
-
-                let next_states = next_states
-                    .into_iter()
-                    .collect::<HashSet<_>>()
-                    .into_iter()
-                    .collect::<Vec<_>>();
+                let next_states = simulator.get_next_states(&current_node);
 
                 for next_state in next_states {
                     stack.push(next_state.clone());
@@ -280,75 +256,6 @@ impl PetriNetwork {
         max
     }
 
-    fn get_next_states(&self, state: &Vec<u8>) -> Vec<Vec<u8>> {
-        assert!(state.len() == self.nodes.len());
-
-        self.recurse(
-            0,
-            Cow::Borrowed(state),
-            Cow::Borrowed(state),
-            &self.get_order(),
-            &mut vec![false; self.transitions.len()],
-        )
-    }
-
-    /// Recursively attempts to progress the simulation to the next step.
-    ///
-    /// When used, you should set `index` to 0, `state_in` and `state_out` to the same
-    /// state, `order` to `get_order()` and `brownout` to `[false; state_in.len()]`
-    fn recurse(
-        &self,
-        mut index: usize,
-        state_in: Cow<Vec<u8>>,
-        state_out: Cow<Vec<u8>>,
-        order: &[usize],
-        brownout: &mut Vec<bool>,
-    ) -> Vec<Vec<u8>> {
-        while index < self.nodes.len() && state_out[order[index]] == 0 {
-            index += 1;
-        }
-        if index >= self.nodes.len() {
-            return vec![state_out.into_owned()];
-        }
-
-        debug_assert!(state_in.len() == state_out.len());
-        debug_assert!(brownout.len() == self.transitions.len());
-
-        let mut transition_candidates = Vec::new();
-        for (n, transition) in self.transitions.iter().enumerate() {
-            if !brownout[n] && transition.is_active(&state_in) {
-                transition_candidates.push(n);
-            }
-        }
-
-        if transition_candidates.len() == 0 {
-            return self.recurse(index + 1, state_in, state_out, order, &mut brownout.clone());
-        }
-
-        let mut res = Vec::new();
-
-        for transition in transition_candidates {
-            let mut new_state_in = state_in.clone().into_owned();
-            let mut new_state_out = state_out.clone().into_owned();
-
-            self.transitions[transition].apply(&mut new_state_in, &mut new_state_out);
-
-            brownout[transition] = true;
-
-            res.append(&mut self.recurse(
-                index + 1,
-                Cow::Owned(new_state_in),
-                Cow::Owned(new_state_out),
-                order,
-                brownout,
-            ));
-
-            brownout[transition] = false;
-        }
-
-        res
-    }
-
     pub fn export_dot<W: std::io::Write>(&self, writer: &mut W) {
         let mut writer = dot_writer::DotWriter::from(writer);
 
@@ -367,14 +274,14 @@ impl PetriNetwork {
 
 #[cfg(test)]
 pub(crate) mod test {
+    use crate::simulator::RecursiveBrancher;
+
     use super::*;
 
     pub(crate) fn test_recurse(network: &PetriNetwork, expected: Vec<Vec<u8>>) {
+        let simulator = RecursiveBrancher::init(network);
         assert_eq!(
-            network
-                .get_next_states(&network.nodes)
-                .into_iter()
-                .collect::<HashSet<_>>(),
+            simulator.get_next_states(&network.nodes),
             expected.into_iter().collect::<HashSet<_>>()
         );
     }

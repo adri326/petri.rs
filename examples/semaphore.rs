@@ -1,6 +1,7 @@
-use petri_network::builder::structures::{Group, Mutex, Semaphore};
-#[allow(unused_imports)]
-use petri_network::{PetriBuilder, PetriNetwork};
+use petri_network::{
+    builder::structures::{Group, Mutex, Semaphore},
+    PetriBuilder, RecursiveBrancher,
+};
 
 fn main() -> Result<(), std::io::Error> {
     let mut builder = PetriBuilder::new();
@@ -75,7 +76,7 @@ fn main() -> Result<(), std::io::Error> {
         println!("Successfully wrote network into `target/exported.dot`");
     }
 
-    let graph = network.generate_graph();
+    let graph = network.generate_graph::<RecursiveBrancher>();
     graph.assert_always_reaches(|state| state[end] == 3);
     graph.assert_forall(|state| state[wake_coiffeur.index()] <= 1);
 

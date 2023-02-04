@@ -90,7 +90,12 @@ pub fn export_network(network: &PetriNetwork, writer: &mut DotWriter) {
     }
 }
 
-pub fn export_graph(graph: &PetriGraph, writer: &mut DotWriter, format: impl Fn(&[u8], &mut Node)) {
+pub fn export_graph(
+    graph: &PetriGraph,
+    writer: &mut DotWriter,
+    format_node: impl Fn(&[u8], &mut Node),
+    format_edge: impl Fn(&[u8], &[u8], &mut AttributesList),
+) {
     fn hash(state: &[u8]) -> u64 {
         let mut hasher = DefaultHasher::new();
         for &x in state {
@@ -104,13 +109,14 @@ pub fn export_graph(graph: &PetriGraph, writer: &mut DotWriter, format: impl Fn(
 
     for (state, _) in graph.iter() {
         let mut node = digraph.node_named(&format!("S{:08x}", hash(state)));
-        format(state, &mut node);
+        format_node(state, &mut node);
     }
 
     for (state, next_states) in graph.iter() {
         let name = format!("S{:08x}", hash(state));
         for next_state in next_states {
-            digraph.edge(&name, &format!("S{:08x}", hash(next_state)));
+            let edge = digraph.edge(&name, &format!("S{:08x}", hash(next_state)));
+            format_edge(state, next_state, &mut edge.attributes());
         }
     }
 }

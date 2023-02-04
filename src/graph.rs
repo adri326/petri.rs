@@ -3,6 +3,8 @@ use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 
+use dot_writer::{AttributesList, Node};
+
 use super::network::export_dot;
 // use crate::{
 //     PetriTransition,
@@ -267,20 +269,20 @@ impl PetriGraph {
         }
     }
 
-    pub fn export_dot<W: std::io::Write>(&self, writer: &mut W) {
-        use dot_writer::Attributes;
-
+    pub fn export_dot<W: std::io::Write>(
+        &self,
+        writer: &mut W,
+        format_node: impl Fn(&[u8], &mut Node),
+        format_edge: impl Fn(&[u8], &[u8], &mut AttributesList),
+    ) {
         let mut writer = dot_writer::DotWriter::from(writer);
 
-        export_dot::export_graph(self, &mut writer, |state, node| {
-            let mut label = String::new();
-            for (_i, &x) in state.iter().enumerate() {
-                if x > 0 {
-                    label += &format!("{},", _i);
-                }
-            }
-            node.set_label(&label[0..(label.len() - 1)]);
-        });
+        export_dot::export_graph(
+            self,
+            &mut writer,
+            format_node,
+            format_edge,
+        );
     }
 
     pub fn get_dot_string(&self) -> String {
@@ -289,15 +291,20 @@ impl PetriGraph {
         let mut vec = Vec::new();
         let mut writer = dot_writer::DotWriter::from(&mut vec);
 
-        export_dot::export_graph(self, &mut writer, |state, node| {
-            let mut label = String::new();
-            for (_i, &x) in state.iter().enumerate() {
-                if x > 0 {
-                    label += &format!("{},", _i);
+        export_dot::export_graph(
+            self,
+            &mut writer,
+            |state, node| {
+                let mut label = String::new();
+                for (_i, &x) in state.iter().enumerate() {
+                    if x > 0 {
+                        label += &format!("{},", _i);
+                    }
                 }
-            }
-            node.set_label(&label[0..(label.len() - 1)]);
-        });
+                node.set_label(&label[0..(label.len() - 1)]);
+            },
+            |_, _, _| {},
+        );
 
         String::from_utf8_lossy(&vec).into_owned()
     }
@@ -451,7 +458,11 @@ impl std::fmt::Debug for PetriGraph {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{network::test::test_recurse, PetriNetwork, PetriTransition};
+    use crate::{
+        network::test::test_recurse,
+        simulator::{RecursiveBrancher, Simulator},
+        PetriNetwork, PetriTransition,
+    };
 
     #[test]
     fn test_generate_graph() {
@@ -463,7 +474,7 @@ mod test {
 
         test_recurse(&network, vec![vec![0, 1]]);
 
-        let graph = network.generate_graph();
+        let graph = network.generate_graph::<RecursiveBrancher>();
 
         let mut expected = PetriGraph {
             map: HashMap::new(),
@@ -480,7 +491,10 @@ mod test {
 
         network.nodes[0] = 0;
 
-        assert_eq!(graph.union(network.generate_graph()), expected);
+        assert_eq!(
+            graph.union(network.generate_graph::<RecursiveBrancher>()),
+            expected
+        );
     }
 
     #[test]
@@ -496,15 +510,15 @@ mod test {
         };
 
         network.nodes[2] = 1;
-        let a = network.generate_graph();
+        let a = network.generate_graph::<RecursiveBrancher>();
 
         network.nodes[2] = 0;
         network.nodes[1] = 1;
-        let b = network.generate_graph();
+        let b = network.generate_graph::<RecursiveBrancher>();
 
         network.nodes[1] = 0;
         network.nodes[0] = 1;
-        let c = network.generate_graph();
+        let c = network.generate_graph::<RecursiveBrancher>();
 
         // Check reflexivity as well
         assert!(a == a);
@@ -529,10 +543,18 @@ mod test {
             vec![PetriTransition::new(vec![0], vec![1], vec![])],
         );
 
-        assert_eq!(network.step(), vec![vec![0, 1]]);
+        let simulator = RecursiveBrancher::init(&network);
 
         assert_eq!(
-            network.generate_graph(),
+            simulator
+                .get_next_states(&network.nodes())
+                .into_iter()
+                .collect::<Vec<_>>(),
+            vec![vec![0, 1]]
+        );
+
+        assert_eq!(
+            network.generate_graph::<RecursiveBrancher>(),
             PetriGraph::from([(vec![1, 0], [vec![0, 1]]), (vec![0, 1], [vec![0, 1]]),])
         );
     }
@@ -550,9 +572,9 @@ mod test {
             ],
         );
 
-        let graph = network.generate_graph();
+        let graph = network.generate_graph::<RecursiveBrancher>();
 
-        let mut graph_transpose = network.generate_graph();
+        let mut graph_transpose = network.generate_graph::<RecursiveBrancher>();
         graph_transpose.calculate_transpose();
 
         assert!(graph_transpose.transpose.borrow().is_some()); // G^T was filled in
@@ -583,7 +605,7 @@ mod test {
             ],
         );
 
-        let graph = network.generate_graph();
+        let graph = network.generate_graph::<RecursiveBrancher>();
 
         graph.assert_always_reaches(|state| state[5] == 1);
 
@@ -591,7 +613,7 @@ mod test {
             for b in 0..=1 {
                 network.set_node(0, a, Default::default());
                 network.set_node(1, b, Default::default());
-                let graph = network.generate_graph();
+                let graph = network.generate_graph::<RecursiveBrancher>();
                 let reaches_c = graph.always_reaches(|state| state[5] == 1); // reaches_c = [A, B, 0, 0, 0, 0] ->> [0, 0, 0, 0, 0, 1]
                 assert_eq!(reaches_c, a == 1 && b == 1); // reaches_c <=> (A, B) = (1, 1)
             }
@@ -623,7 +645,7 @@ mod test {
 
         network.set_node(1, 0, Default::default());
         network.set_node(0, 1, Default::default());
-        let graph = network.generate_graph();
+        let graph = network.generate_graph::<RecursiveBrancher>();
 
         assert_eq!(
             graph,
