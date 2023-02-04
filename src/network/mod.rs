@@ -208,11 +208,8 @@ impl PetriNetwork {
     }
 
     pub fn step(&self) -> Vec<Vec<u8>> {
-        let res = self.recurse(
-            0,
-            Cow::Borrowed(&self.nodes),
-            Cow::Borrowed(&self.nodes),
-            &self.get_order(),
+        let res = self.get_next_states(
+            &self.nodes
         );
 
         if cfg!(feature = "conflict_fast") {
@@ -247,19 +244,13 @@ impl PetriNetwork {
 
     pub fn generate_graph(&self) -> PetriGraph {
         let mut map: HashMap<Vec<u8>, HashSet<Vec<u8>>> = HashMap::new();
-        let order = self.get_order();
 
         let mut stack = vec![self.nodes.clone()];
         while let Some(current_node) = stack.pop() {
             if map.get(&current_node).is_none() {
                 let mut hashset = HashSet::new();
 
-                let next_states = self.recurse(
-                    0,
-                    Cow::Borrowed(&current_node),
-                    Cow::Borrowed(&current_node),
-                    &order,
-                );
+                let next_states = self.get_next_states(&current_node);
 
                 let next_states = if cfg!(feature = "conflict_fast") {
                     next_states
@@ -303,12 +294,29 @@ impl PetriNetwork {
         max
     }
 
+    fn get_next_states(&self, state: &Vec<u8>) -> Vec<Vec<u8>> {
+        assert!(state.len() == self.nodes.len());
+
+        self.recurse(
+            0,
+            Cow::Borrowed(state),
+            Cow::Borrowed(state),
+            &self.get_order(),
+            &mut vec![false; self.transitions.len()]
+        )
+    }
+
+    /// Recursively attempts to progress the simulation to the next step.
+    ///
+    /// When used, you should set `index` to 0, `state_in` and `state_out` to the same
+    /// state, `order` to `get_order()` and `brownout` to `[false; state_in.len()]`
     fn recurse(
         &self,
         mut index: usize,
         state_in: Cow<Vec<u8>>,
         state_out: Cow<Vec<u8>>,
         order: &[usize],
+        brownout: &mut Vec<bool>,
     ) -> Vec<Vec<u8>> {
         while index < self.nodes.len() && state_out[order[index]] == 0 {
             index += 1;
@@ -316,6 +324,9 @@ impl PetriNetwork {
         if index >= self.nodes.len() {
             return vec![state_out.into_owned()];
         }
+
+        debug_assert!(state_in.len() == state_out.len());
+        debug_assert!(brownout.len() == self.transitions.len());
 
         let mut transition_candidates = Vec::new();
         for (n, transition) in self.transitions.iter().enumerate() {
@@ -325,13 +336,22 @@ impl PetriNetwork {
                 true
             };
 
-            if is_relevant && transition.is_active(&state_in) {
+            let has_browned_out = if cfg!(not(feature = "conflict_fast")) {
+                brownout[n]
+            } else {
+                false
+            };
+
+            if is_relevant && !has_browned_out && transition.is_active(&state_in) {
                 transition_candidates.push(n);
             }
         }
 
         if transition_candidates.len() == 0 {
-            return self.recurse(index + 1, state_in, state_out, order);
+            if cfg!(feature = "conflict_fast") {
+                return self.recurse(index + 1, state_in, state_out, order, brownout);
+            }
+            return self.recurse(index + 1, state_in, state_out, order, &mut brownout.clone());
         }
 
         if cfg!(not(any(
@@ -351,12 +371,21 @@ impl PetriNetwork {
 
             self.transitions[transition].apply(&mut new_state_in, &mut new_state_out);
 
+            if cfg!(not(feature = "fast")) {
+                brownout[transition] = true;
+            }
+
             res.append(&mut self.recurse(
                 index + 1,
                 Cow::Owned(new_state_in),
                 Cow::Owned(new_state_out),
                 order,
+                brownout
             ));
+
+            if cfg!(not(feature = "fast")) {
+                brownout[transition] = false;
+            }
         }
 
         res
@@ -387,11 +416,8 @@ pub(crate) mod test {
     pub(crate) fn test_recurse(network: &PetriNetwork, expected: Vec<Vec<u8>>) {
         assert_eq!(
             network
-                .recurse(
-                    0,
-                    Cow::Borrowed(&network.nodes),
-                    Cow::Borrowed(&network.nodes),
-                    &network.get_order()
+                .get_next_states(
+                    &network.nodes
                 )
                 .into_iter()
                 .collect::<HashSet<_>>(),

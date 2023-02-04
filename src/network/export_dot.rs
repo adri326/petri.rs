@@ -90,7 +90,7 @@ pub fn export_network(network: &PetriNetwork, writer: &mut DotWriter) {
     }
 }
 
-pub fn export_graph(graph: &PetriGraph, writer: &mut DotWriter) {
+pub fn export_graph(graph: &PetriGraph, writer: &mut DotWriter, format: impl Fn(&[u8], &mut Node)) {
     fn hash(state: &[u8]) -> u64 {
         let mut hasher = DefaultHasher::new();
         for &x in state {
@@ -104,13 +104,7 @@ pub fn export_graph(graph: &PetriGraph, writer: &mut DotWriter) {
 
     for (state, _) in graph.iter() {
         let mut node = digraph.node_named(&format!("S{:08x}", hash(state)));
-        let mut label = String::new();
-        for (i, &x) in state.iter().enumerate() {
-            if x > 0 {
-                label += &format!("{},", i);
-            }
-        }
-        node.set_label(&label[0..(label.len() - 1)]);
+        format(state, &mut node);
     }
 
     for (state, next_states) in graph.iter() {

@@ -270,17 +270,37 @@ impl PetriGraph {
 
     #[cfg(feature = "export_dot")]
     pub fn export_dot<W: std::io::Write>(&self, writer: &mut W) {
+        use dot_writer::Attributes;
+
         let mut writer = dot_writer::DotWriter::from(writer);
 
-        export_dot::export_graph(self, &mut writer);
+        export_dot::export_graph(self, &mut writer, |state, node| {
+            let mut label = String::new();
+            for (_i, &x) in state.iter().enumerate() {
+                if x > 0 {
+                    label += &format!("{},", _i);
+                }
+            }
+            node.set_label(&label[0..(label.len() - 1)]);
+        });
     }
 
     #[cfg(feature = "export_dot")]
     pub fn get_dot_string(&self) -> String {
+        use dot_writer::Attributes;
+
         let mut vec = Vec::new();
         let mut writer = dot_writer::DotWriter::from(&mut vec);
 
-        export_dot::export_graph(self, &mut writer);
+        export_dot::export_graph(self, &mut writer, |state, node| {
+            let mut label = String::new();
+            for (_i, &x) in state.iter().enumerate() {
+                if x > 0 {
+                    label += &format!("{},", _i);
+                }
+            }
+            node.set_label(&label[0..(label.len() - 1)]);
+        });
 
         String::from_utf8_lossy(&vec).into_owned()
     }

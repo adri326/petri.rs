@@ -4,7 +4,7 @@ use std::{
     num::ParseIntError,
 };
 
-use crate::{network::PetriNetwork, PetriTransition};
+use crate::{network::PetriNetwork, PetriTransition, PetriNodeData};
 
 #[derive(Debug)]
 pub enum ParseError {
@@ -43,6 +43,8 @@ pub fn parse(raw: &str) -> Result<PetriNetwork, ParseError> {
 
     let indices = get_indices(&nodes);
 
+    let node_data = get_node_data(&indices);
+
     let nodes = get_values(&assigns, &indices);
 
     let transitions = transitions
@@ -52,7 +54,7 @@ pub fn parse(raw: &str) -> Result<PetriNetwork, ParseError> {
 
     Ok(PetriNetwork::new(
         nodes,
-        vec![Default::default(); indices.len()],
+        node_data,
         transitions,
     ))
 }
@@ -176,6 +178,20 @@ fn get_values<'a, 'b: 'a>(assigns: impl IntoIterator<Item=&'a (impl AsRef<str> +
     res
 }
 
+fn get_node_data(indices: &HashMap<String, usize>) -> Vec<PetriNodeData> {
+    let mut res = vec![Default::default(); indices.len()];
+
+    for (name, index) in indices {
+        res[*index] = PetriNodeData {
+            label: Some(name.clone()),
+            groups: vec![],
+            max_value: None
+        }
+    }
+
+    dbg!(res)
+}
+
 #[cfg(test)]
 mod test {
     use crate::PetriBuilder;
@@ -231,9 +247,9 @@ mod test {
     #[test]
     fn should_fully_parse_simple() {
         let mut builder = PetriBuilder::new();
-        let start = builder.node(0);
+        let start = builder.node_with_label(0, "A");
         builder.begin_branch(start)
-            .step();
+            .step_with_label("B");
 
         assert_eq!(
             parse("A -> B").unwrap(),
@@ -244,8 +260,8 @@ mod test {
     #[test]
     fn should_assign_values() {
         let mut builder = PetriBuilder::new();
-        let start = builder.node(3);
-        let end = builder.node(2);
+        let start = builder.node_with_label(3, "A");
+        let end = builder.node_with_label(2, "B");
 
         builder.begin_transition()
             .input(start)

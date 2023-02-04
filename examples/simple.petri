@@ -1,0 +1,16 @@
+Semaphore = 4
+Pool = 4
+
+Pool -> Pool
+Pool -> Pool_begin
+
+{ Semaphore, Pool_begin } -> A_begin
+{ A_begin, Semaphore } -> OP1_begin
+OP1_begin -> OP1_begin
+OP1_begin -> OP1_end
+OP1_end -> { Semaphore, A_middle }
+{ A_middle, Semaphore } -> OP2_begin
+OP2_begin -> OP2_begin
+OP2_begin -> OP2_end
+OP2_end -> { Semaphore, A_end }
+A_end -> { Semaphore, Pool_end }
