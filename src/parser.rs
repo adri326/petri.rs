@@ -4,7 +4,7 @@ use std::{
     num::ParseIntError,
 };
 
-use crate::{network::PetriNetwork, PetriTransition, PetriNodeData};
+use crate::{network::PetriNetwork, PetriNodeData, PetriTransition};
 
 #[derive(Debug)]
 pub enum ParseError {
@@ -52,11 +52,7 @@ pub fn parse(raw: &str) -> Result<PetriNetwork, ParseError> {
         .map(|transition| generate_edge(transition, &indices))
         .collect::<Vec<_>>();
 
-    Ok(PetriNetwork::new(
-        nodes,
-        node_data,
-        transitions,
-    ))
+    Ok(PetriNetwork::new(nodes, node_data, transitions))
 }
 
 #[derive(Debug, PartialEq)]
@@ -168,7 +164,10 @@ fn get_indices<'a, T: Hash + Clone + Eq + 'a>(
     res
 }
 
-fn get_values<'a, 'b: 'a>(assigns: impl IntoIterator<Item=&'a (impl AsRef<str> + 'a, u8)>, indices: &HashMap<String, usize>) -> Vec<u8> {
+fn get_values<'a, 'b: 'a>(
+    assigns: impl IntoIterator<Item = &'a (impl AsRef<str> + 'a, u8)>,
+    indices: &HashMap<String, usize>,
+) -> Vec<u8> {
     let mut res = vec![0; indices.len()];
 
     for (name, value) in assigns.into_iter() {
@@ -185,7 +184,7 @@ fn get_node_data(indices: &HashMap<String, usize>) -> Vec<PetriNodeData> {
         res[*index] = PetriNodeData {
             label: Some(name.clone()),
             groups: vec![],
-            max_value: None
+            max_value: None,
         }
     }
 
@@ -248,13 +247,9 @@ mod test {
     fn should_fully_parse_simple() {
         let mut builder = PetriBuilder::new();
         let start = builder.node_with_label(0, "A");
-        builder.begin_branch(start)
-            .step_with_label("B");
+        builder.begin_branch(start).step_with_label("B");
 
-        assert_eq!(
-            parse("A -> B").unwrap(),
-            builder.build()
-        );
+        assert_eq!(parse("A -> B").unwrap(), builder.build());
     }
 
     #[test]
@@ -263,15 +258,9 @@ mod test {
         let start = builder.node_with_label(3, "A");
         let end = builder.node_with_label(2, "B");
 
-        builder.begin_transition()
-            .input(start)
-            .output(end)
-            .build();
+        builder.begin_transition().input(start).output(end).build();
 
-        builder.begin_transition()
-            .input(end)
-            .output(start)
-            .build();
+        builder.begin_transition().input(end).output(start).build();
 
         assert_eq!(
             parse("A = 3\nB = 2\n\nA -> B\nB -> A").unwrap(),

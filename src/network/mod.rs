@@ -5,7 +5,6 @@ use std::collections::{HashMap, HashSet};
 pub mod data;
 use data::PetriNodeData;
 
-#[cfg(feature = "export_dot")]
 pub(crate) mod export_dot;
 
 // TODO: reimplement PartialEq
@@ -208,38 +207,29 @@ impl PetriNetwork {
     }
 
     pub fn step(&self) -> Vec<Vec<u8>> {
-        let res = self.get_next_states(
-            &self.nodes
-        );
+        let res = self.get_next_states(&self.nodes);
 
-        if cfg!(feature = "conflict_fast") {
-            res
-        } else {
-            // Deduplicate output (TODO: do this in `recurse`?)
-            res.into_iter()
-                .collect::<HashSet<_>>()
-                .into_iter()
-                .collect::<Vec<_>>()
-        }
+        // Deduplicate output (TODO: do this in `recurse`?)
+        res.into_iter()
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>()
     }
 
     fn get_order(&self) -> Vec<usize> {
-        if cfg!(feature = "conflict_normal") {
-            let mut order = (0..self.nodes.len()).collect::<Vec<_>>();
-            let mut weights = vec![0usize; self.nodes.len()];
-            for transition in self.transitions.iter() {
-                for input in transition.inputs.iter() {
-                    weights[*input] += 1;
-                }
+        // TODO: memoize?
+        let mut order = (0..self.nodes.len()).collect::<Vec<_>>();
+        let mut weights = vec![0usize; self.nodes.len()];
+        for transition in self.transitions.iter() {
+            for input in transition.inputs.iter() {
+                weights[*input] += 1;
             }
-
-            order.sort_unstable_by_key(|&i| weights[i]);
-            order.reverse();
-
-            order
-        } else {
-            (0..self.nodes.len()).collect::<Vec<_>>()
         }
+
+        order.sort_unstable_by_key(|&i| weights[i]);
+        order.reverse();
+
+        order
     }
 
     pub fn generate_graph(&self) -> PetriGraph {
@@ -252,15 +242,11 @@ impl PetriNetwork {
 
                 let next_states = self.get_next_states(&current_node);
 
-                let next_states = if cfg!(feature = "conflict_fast") {
-                    next_states
-                } else {
-                    next_states
-                        .into_iter()
-                        .collect::<HashSet<_>>()
-                        .into_iter()
-                        .collect::<Vec<_>>()
-                };
+                let next_states = next_states
+                    .into_iter()
+                    .collect::<HashSet<_>>()
+                    .into_iter()
+                    .collect::<Vec<_>>();
 
                 for next_state in next_states {
                     stack.push(next_state.clone());
@@ -302,7 +288,7 @@ impl PetriNetwork {
             Cow::Borrowed(state),
             Cow::Borrowed(state),
             &self.get_order(),
-            &mut vec![false; self.transitions.len()]
+            &mut vec![false; self.transitions.len()],
         )
     }
 
@@ -330,37 +316,13 @@ impl PetriNetwork {
 
         let mut transition_candidates = Vec::new();
         for (n, transition) in self.transitions.iter().enumerate() {
-            let is_relevant = if cfg!(any(feature = "conflict_fast", feature = "conflict_normal")) {
-                transition.inputs.iter().any(|x| *x == order[index])
-            } else {
-                true
-            };
-
-            let has_browned_out = if cfg!(not(feature = "conflict_fast")) {
-                brownout[n]
-            } else {
-                false
-            };
-
-            if is_relevant && !has_browned_out && transition.is_active(&state_in) {
+            if !brownout[n] && transition.is_active(&state_in) {
                 transition_candidates.push(n);
             }
         }
 
         if transition_candidates.len() == 0 {
-            if cfg!(feature = "conflict_fast") {
-                return self.recurse(index + 1, state_in, state_out, order, brownout);
-            }
             return self.recurse(index + 1, state_in, state_out, order, &mut brownout.clone());
-        }
-
-        if cfg!(not(any(
-            feature = "conflict_fast",
-            feature = "conflict_normal",
-            feature = "conflict_slow"
-        ))) && transition_candidates.len() > 1
-        {
-            panic!("Conflict found in network while no conflict strategy was chosen!");
         }
 
         let mut res = Vec::new();
@@ -371,34 +333,28 @@ impl PetriNetwork {
 
             self.transitions[transition].apply(&mut new_state_in, &mut new_state_out);
 
-            if cfg!(not(feature = "fast")) {
-                brownout[transition] = true;
-            }
+            brownout[transition] = true;
 
             res.append(&mut self.recurse(
                 index + 1,
                 Cow::Owned(new_state_in),
                 Cow::Owned(new_state_out),
                 order,
-                brownout
+                brownout,
             ));
 
-            if cfg!(not(feature = "fast")) {
-                brownout[transition] = false;
-            }
+            brownout[transition] = false;
         }
 
         res
     }
 
-    #[cfg(feature = "export_dot")]
     pub fn export_dot<W: std::io::Write>(&self, writer: &mut W) {
         let mut writer = dot_writer::DotWriter::from(writer);
 
         export_dot::export_network(self, &mut writer);
     }
 
-    #[cfg(feature = "export_dot")]
     pub fn get_dot_string(&self) -> String {
         let mut vec = Vec::new();
         let mut writer = dot_writer::DotWriter::from(&mut vec);
@@ -416,9 +372,7 @@ pub(crate) mod test {
     pub(crate) fn test_recurse(network: &PetriNetwork, expected: Vec<Vec<u8>>) {
         assert_eq!(
             network
-                .get_next_states(
-                    &network.nodes
-                )
+                .get_next_states(&network.nodes)
                 .into_iter()
                 .collect::<HashSet<_>>(),
             expected.into_iter().collect::<HashSet<_>>()
@@ -510,7 +464,6 @@ pub(crate) mod test {
     }
 
     #[test]
-    #[cfg(any(feature = "conflict_normal", feature = "conflict_slow"))]
     fn test_recurse_conflict() {
         let mut network = PetriNetwork {
             nodes: vec![1, 1, 1, 0],

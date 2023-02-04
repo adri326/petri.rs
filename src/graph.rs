@@ -3,7 +3,6 @@ use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 
-#[cfg(feature = "export_dot")]
 use super::network::export_dot;
 // use crate::{
 //     PetriTransition,
@@ -268,7 +267,6 @@ impl PetriGraph {
         }
     }
 
-    #[cfg(feature = "export_dot")]
     pub fn export_dot<W: std::io::Write>(&self, writer: &mut W) {
         use dot_writer::Attributes;
 
@@ -285,7 +283,6 @@ impl PetriGraph {
         });
     }
 
-    #[cfg(feature = "export_dot")]
     pub fn get_dot_string(&self) -> String {
         use dot_writer::Attributes;
 
