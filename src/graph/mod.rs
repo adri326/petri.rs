@@ -1,16 +1,18 @@
-use std::borrow::Cow;
 use std::cell::RefCell;
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use dot_writer::{AttributesList, Node};
 
 use super::network::export_dot;
 
+mod edge_map;
+pub use edge_map::EdgeMap;
+
 #[derive(Clone)]
 pub struct PetriGraph {
-    map: HashMap<Vec<u8>, HashSet<Vec<u8>>>,
-    reverse: RefCell<Option<HashMap<Vec<u8>, HashSet<Vec<u8>>>>>,
+    map: EdgeMap<()>,
+    reverse: RefCell<Option<EdgeMap<()>>>,
 }
 
 /// A graph of states of a petri network. The following notation is used in this document:
@@ -24,68 +26,50 @@ pub struct PetriGraph {
 /// - `node_a ->> node_b [G]` if `∃ k_n ∈ ℕ→G, N ∈ ℕ` such that `∀ n < N, k_n -> k_n+1 [G]`, `k_0 = node_a` and `k_N = node_b`.
 ///    In other words, there exists a path from `node_a` to `node_b`.
 impl PetriGraph {
-    pub fn new(map: HashMap<Vec<u8>, HashSet<Vec<u8>>>) -> Self {
+    pub fn new(map: EdgeMap<()>) -> Self {
         Self {
             map,
             reverse: RefCell::new(None),
         }
     }
 
-    pub fn get<'b>(&'b self, state: &Vec<u8>) -> Option<&'b HashSet<Vec<u8>>> {
-        self.map.get(state)
-    }
-
     #[inline]
-    pub fn with_reverse<F, T>(&self, state: &Vec<u8>, fn_with: F) -> Option<T>
+    pub fn with_reverse<F, T>(&self, fn_with: F) -> T
     where
-        F: for<'c> FnOnce(&'c HashSet<Vec<u8>>) -> T,
+        F: for<'c> FnOnce(&'c EdgeMap<()>) -> T,
     {
         self.calculate_reverse();
 
-        if let Some(ref inverse) = self.reverse.borrow().as_ref().unwrap().get(state) {
-            Some((fn_with)(inverse))
+        if let Some(ref inverse) = self.reverse.borrow().as_ref() {
+            (fn_with)(inverse)
         } else {
-            None
+            unreachable!();
         }
     }
 
-    pub fn iter<'b>(&'b self) -> std::collections::hash_map::Iter<'b, Vec<u8>, HashSet<Vec<u8>>> {
-        self.map.iter()
+    pub fn iter<'b>(
+        &'b self,
+    ) -> impl Iterator<Item = (&Vec<u8>, impl IntoIterator<Item = &Vec<u8>>)> {
+        self.map
+            .iter_nodes()
+            .map(|node| (node, self.map.iter_edges_of(node)))
     }
 
     /// Returns the union graph of `self` and `other`, where if `res = self ∪ other`,
     /// `∀ node ∈ self, node ⊂ res[node]` and `∀ node ∈ other, node ⊂ res[node]`
     ///
     /// We thus have the relations `self ⊂ res` and `other ⊂ res`.
-    pub fn union<'b>(&'b self, other: Self) -> Self {
-        let mut map = HashMap::with_capacity(self.map.len() + other.map.len());
-
-        map.extend(other.map.into_iter());
-
-        // Merge the elements of `other` into `map`
-        for (node, next_states) in self.map.iter() {
-            match map.get_mut(node) {
-                Some(ref mut res_states) => {
-                    res_states.extend(next_states.iter().cloned());
-                }
-                None => {
-                    map.insert(node.clone(), next_states.clone());
-                }
-            }
-        }
-
-        // Shrink result hashmap and hashsets
-        for (_, node) in map.iter_mut() {
-            node.shrink_to_fit();
-        }
+    pub fn union<'b>(&'b self, other: &Self) -> Self {
+        let mut map = self.map.union(&other.map);
 
         map.shrink_to_fit();
 
-        if self.reverse.borrow().is_some() {
-            if let Some(reverse_other) = other.reverse.into_inner() {
+        if let Some(reverse_self) = self.reverse.borrow().as_ref() {
+            if let Some(reverse_other) = other.reverse.borrow().as_ref() {
+                // We have (G ∪ H)^T = G^T ∪ H^T; the proof can be found in `proofs/reverse-union.lean`
                 return Self {
                     map,
-                    reverse: RefCell::new(Some(self.union_reverse(reverse_other))),
+                    reverse: RefCell::new(Some(reverse_self.union(reverse_other))),
                 };
             }
         }
@@ -98,45 +82,12 @@ impl PetriGraph {
 
     fn calculate_reverse(&self) {
         if self.reverse.borrow().is_none() {
-            let mut res: HashMap<Vec<u8>, HashSet<Vec<u8>>> = HashMap::new();
-
-            for (node, next_states) in self.map.iter() {
-                for next_state in next_states.iter() {
-                    match res.get_mut(next_state) {
-                        Some(ref mut hashset) => {
-                            hashset.insert(node.clone());
-                        }
-                        None => {
-                            res.insert(next_state.clone(), [node.clone()].into());
-                        }
-                    }
-                }
-            }
-
-            *self.reverse.borrow_mut() = Some(res);
+            *self.reverse.borrow_mut() = Some(self.map.reverse());
         }
-    }
-
-    /// Builds the reverse map of the union between self and reverse_other; assumes that self.reverse is not None
-    /// We have (G ∪ H)^T = G^T ∪ H^T, the proof can be found in `proofs/reverse-union.lean`
-    fn union_reverse(&self, reverse_other: HashMap<Vec<u8>, HashSet<Vec<u8>>>) -> HashMap<Vec<u8>, HashSet<Vec<u8>>> {
-        let mut res = self.reverse.borrow().clone().unwrap();
-
-        for (key, value) in reverse_other.into_iter() {
-            if let Some(ref mut existing) = res.get_mut(&key) {
-                for v in value {
-                    existing.insert(v);
-                }
-            } else {
-                res.insert(key, value);
-            }
-        }
-
-        res
     }
 
     /// Returns the greatest set `S ⊂ self` such that `∀ node ∈ S`, `∃ state ∈ self` such that `condition(state)` and `node ->> state`
-    pub fn reaches<'b, F>(&'b self, condition: F) -> HashSet<Cow<'b, Vec<u8>>>
+    pub fn reaches<'b, F>(&'b self, condition: F) -> HashSet<Vec<u8>>
     where
         F: for<'c> Fn(&'c Vec<u8>) -> bool,
     {
@@ -144,9 +95,9 @@ impl PetriGraph {
         let mut stack = Vec::new();
         let mut condition_always_true = true;
 
-        for (node, _) in self.map.iter() {
+        for node in self.map.iter_nodes() {
             if (condition)(node) {
-                hash_set.insert(Cow::Borrowed(node));
+                hash_set.insert(node.clone());
                 stack.push(node);
             } else {
                 condition_always_true = false;
@@ -159,20 +110,17 @@ impl PetriGraph {
 
         self.calculate_reverse();
 
-        if let Ok(ref reverse) = self.reverse.try_borrow() {
-            let reverse = reverse.as_ref().expect(
-                "PetriGraph::calculate_reverse did not set PetriGraph::reverse to Some(...)",
-            );
-            while let Some(current_node) = stack.pop() {
-                for antecedent in reverse.get(current_node).iter().map(|x| x.iter()).flatten() {
-                    if !hash_set.contains(antecedent) {
-                        hash_set.insert(Cow::Owned(antecedent.clone()));
-                        stack.push(antecedent);
-                    }
+        let reverse = self.reverse.borrow();
+        let reverse = reverse
+            .as_ref()
+            .expect("PetriGraph::calculate_reverse did not set PetriGraph::reverse to Some(...)");
+        while let Some(current_node) = stack.pop() {
+            for antecedent in reverse.iter_edges_of(current_node) {
+                if !hash_set.contains(antecedent) {
+                    hash_set.insert(antecedent.clone());
+                    stack.push(antecedent);
                 }
             }
-        } else {
-            panic!("Couldn't borrow() PetriGraph::tranpose");
         }
 
         hash_set
@@ -184,11 +132,7 @@ impl PetriGraph {
         F: for<'c> Fn(&'c Vec<u8>) -> bool,
     {
         let actual = self.reaches(condition);
-        let expected = self
-            .map
-            .iter()
-            .map(|(k, _)| Cow::Borrowed(k))
-            .collect::<HashSet<_>>();
+        let expected = self.map.iter_nodes().cloned().collect::<HashSet<_>>();
 
         actual == expected
     }
@@ -199,25 +143,12 @@ impl PetriGraph {
         F: for<'c> Fn(&'c Vec<u8>) -> bool + Copy,
     {
         let actual = self.reaches(condition);
-        let expected = self
-            .map
-            .iter()
-            .map(|(k, _)| Cow::Borrowed(k))
-            .collect::<HashSet<_>>();
+        let expected = self.map.iter_nodes().cloned().collect::<HashSet<_>>();
 
         if actual != expected {
-            let expected = expected
-                .iter()
-                .map(|cow| cow.as_ref())
-                .collect::<HashSet<_>>();
-            let actual = actual
-                .iter()
-                .map(|cow| cow.as_ref())
-                .collect::<HashSet<_>>();
             let base = self
                 .map
-                .iter()
-                .map(|(k, _)| k)
+                .iter_nodes()
                 .filter(|k| (condition)(k))
                 .collect::<HashSet<_>>();
 
@@ -233,7 +164,9 @@ impl PetriGraph {
             for node in base.iter() {
                 eprintln!(" - {:?}", node);
             }
-            eprintln!("Info: Set difference (# is part of the base set, + is reached, - is not reached):");
+            eprintln!(
+                "Info: Set difference (# is part of the base set, + is reached, - is not reached):"
+            );
             for node in expected.iter() {
                 if actual.contains(node) {
                     if base.contains(node) {
@@ -253,7 +186,7 @@ impl PetriGraph {
     where
         F: for<'c> Fn(&'c Vec<u8>) -> bool + Copy,
     {
-        for (node, _) in self.map.iter() {
+        for node in self.map.iter_nodes() {
             if !(condition)(node) {
                 return false;
             }
@@ -268,7 +201,7 @@ impl PetriGraph {
     {
         let mut errors = HashSet::new();
 
-        for (node, _) in self.map.iter() {
+        for node in self.map.iter_nodes() {
             if !(condition)(node) {
                 errors.insert(node);
             }
@@ -276,7 +209,7 @@ impl PetriGraph {
 
         if errors.len() > 0 {
             eprintln!("Info: Nodes analyzed: (- yielded false, + yielded true)");
-            for (node, _) in self.map.iter() {
+            for node in self.map.iter_nodes() {
                 if errors.contains(node) {
                     eprintln!(" - {:?}", node);
                 } else {
@@ -288,9 +221,10 @@ impl PetriGraph {
     }
 
     pub fn final_nodes<'b>(&'b self) -> impl Iterator<Item = &'b Vec<u8>> + 'b {
-        self.map.iter().filter_map(|(key, values)| {
-            if values.len() == 0 || values.len() == 1 && values.contains(key) {
-                Some(key)
+        self.map.iter_nodes().filter_map(|node| {
+            let count = self.map.count_of(node);
+            if count == 0 || count == 1 && self.map.iter_edges_of(node).any(|n| n == node) {
+                Some(node)
             } else {
                 None
             }
@@ -298,26 +232,23 @@ impl PetriGraph {
     }
 
     pub fn subgraph(&self, node: &[u8]) -> PetriGraph {
-        let mut map = HashMap::with_capacity(self.map.len());
+        let mut res = EdgeMap::default();
 
         let mut open = vec![Vec::from(node)];
 
         while let Some(state) = open.pop() {
-            if map.contains_key(&state) {
+            if res.count_of(&state) > 0 {
                 continue;
             }
 
-            let next_states = self.map.get(&state).unwrap();
-
-            for next_state in next_states {
+            for (next_state, attribute) in self.map.iter_of(&state) {
                 open.push(next_state.clone());
+                res.add(&state, next_state.clone(), attribute.clone());
             }
-
-            map.insert(state, next_states.clone());
         }
 
         PetriGraph {
-            map,
+            map: res,
             reverse: RefCell::new(None),
         }
     }
@@ -358,134 +289,26 @@ impl PetriGraph {
     }
 }
 
-impl<T: IntoIterator<Item = Vec<u8>>, const N: usize> From<[(Vec<u8>, T); N]> for PetriGraph {
-    fn from(iter: [(Vec<u8>, T); N]) -> Self {
-        let iter = iter.into_iter().map(|(k, n)| (k, n.into_iter().collect()));
-        Self {
-            map: iter.collect(),
-            reverse: RefCell::new(None),
-        }
-    }
-}
-
-impl<T: IntoIterator<Item = Vec<u8>>> FromIterator<(Vec<u8>, T)> for PetriGraph {
-    fn from_iter<U: IntoIterator<Item = (Vec<u8>, T)>>(iter: U) -> Self {
-        let iter = iter.into_iter().map(|(k, n)| (k, n.into_iter().collect()));
-        Self {
-            map: iter.collect(),
-            reverse: RefCell::new(None),
-        }
-    }
-}
-
-impl std::ops::Index<&Vec<u8>> for PetriGraph {
-    type Output = HashSet<Vec<u8>>;
-
-    fn index<'b>(&'b self, key: &Vec<u8>) -> &'b HashSet<Vec<u8>> {
-        &self.map[key]
-    }
-}
-
 impl PartialEq for PetriGraph {
     fn eq(&self, other: &Self) -> bool {
-        if self.map.len() != other.map.len() {
-            return false;
-        }
-
-        for (node, self_states) in self.map.iter() {
-            if let Some(other_states) = other.map.get(node) {
-                if self_states != other_states {
-                    return false;
-                }
-            } else {
-                return false;
-            }
-        }
-
-        true
+        self.map == other.map
     }
 }
-
-impl Eq for PetriGraph {}
 
 impl PartialOrd for PetriGraph {
     /// Tests inclusion between self and `other`: if self is a sub-graph of `other` (ie `∀ node ∈ self`, `node ⊂ other[node]`), then
     /// `Ordering::Less` is returned and vice-versa (with `Ordering::Greater`).
     /// If neither are included in each other, then returns `None` and if both are equal, returns `Ordering::Greater`
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        let mut self_inner = true;
-        let mut other_inner = true;
-        match self.map.len().partial_cmp(&other.map.len()) {
-            Some(Ordering::Less) => {
-                other_inner = false; // `self` is smaller than `other`
-            }
-            Some(Ordering::Greater) => {
-                self_inner = false; // `other` is smaller than `self`
-            }
-            _ => {}
-        }
-
-        if !self_inner && !other_inner {
-            return None;
-        }
-
-        // Test for self ⊂ other, ie. ∀node∈self, node ⊂ other[node]
-        for (node, self_states) in self.map.iter() {
-            if let Some(other_states) = other.map.get(node) {
-                if self_states.is_subset(other_states) {
-                    continue;
-                }
-            }
-            self_inner = false;
-            break;
-        }
-
-        if !self_inner && !other_inner {
-            return None;
-        }
-
-        // Test for other ⊂ self, ie. ∀node∈other, node ⊂ self[node]
-        for (node, other_states) in other.map.iter() {
-            if let Some(self_states) = self.map.get(node) {
-                if other_states.is_subset(self_states) {
-                    continue;
-                }
-            }
-            other_inner = false;
-            break;
-        }
-
-        match (self_inner, other_inner) {
-            (true, true) => Some(Ordering::Equal),
-            (true, false) => Some(Ordering::Less), // self ⊂ other -> self <= other
-            (false, true) => Some(Ordering::Greater), // other ⊂ self -> self >= other
-            (false, false) => None,
-        }
-    }
-}
-
-impl IntoIterator for PetriGraph {
-    type IntoIter = std::collections::hash_map::IntoIter<Vec<u8>, HashSet<Vec<u8>>>;
-    type Item = (Vec<u8>, HashSet<Vec<u8>>);
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.map.into_iter()
-    }
-}
-
-impl<'a> IntoIterator for &'a PetriGraph {
-    type IntoIter = std::collections::hash_map::Iter<'a, Vec<u8>, HashSet<Vec<u8>>>;
-    type Item = (&'a Vec<u8>, &'a HashSet<Vec<u8>>);
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.map.iter()
+        self.map.partial_cmp(&other.map)
     }
 }
 
 impl std::fmt::Debug for PetriGraph {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "PetriGraph {{")?;
-        for (node, next_states) in self.map.iter() {
+        for node in self.map.iter_nodes() {
+            let next_states = self.map.iter_edges_of(node).collect::<Vec<_>>();
             write!(f, "  {:?} => ", node)?;
             if next_states.len() == 0 {
                 writeln!(f, "{{}},")?;
@@ -507,10 +330,9 @@ impl std::fmt::Debug for PetriGraph {
 mod test {
     use super::*;
     use crate::{
-        network::test::test_recurse,
-        simulator::{RecursiveBrancher, Simulator},
-        PetriNetwork, PetriTransition,
+        network::test::test_recurse, simulator::RecursiveBrancher, PetriNetwork, PetriTransition,
     };
+    use std::collections::HashMap;
 
     #[test]
     fn test_generate_graph() {
@@ -525,22 +347,22 @@ mod test {
         let graph = network.generate_graph::<RecursiveBrancher>();
 
         let mut expected = PetriGraph {
-            map: HashMap::new(),
+            map: EdgeMap::default(),
             reverse: RefCell::new(None),
         };
-        expected.map.insert(vec![1, 0], [vec![0, 1]].into());
-        expected.map.insert(vec![0, 1], [vec![0, 1]].into()); // Identity
+        expected.map.add(&[1, 0], vec![0, 1], ());
+        expected.map.add(&[0, 1], vec![0, 1], ()); // Identity
 
         assert_eq!(graph, expected);
 
-        expected.map.insert(vec![0, 0], [vec![0, 0]].into());
+        expected.map.add(&[0, 0], vec![0, 0], ());
         assert_eq!(graph.partial_cmp(&expected), Some(Ordering::Less));
         assert_eq!(expected.partial_cmp(&graph), Some(Ordering::Greater));
 
         network.nodes[0] = 0;
 
         assert_eq!(
-            graph.union(network.generate_graph::<RecursiveBrancher>()),
+            graph.union(&network.generate_graph::<RecursiveBrancher>()),
             expected
         );
     }
@@ -581,30 +403,6 @@ mod test {
 
         assert!(a < c);
         assert!(c > a);
-    }
-
-    #[test]
-    fn test_graph_from() {
-        let network = PetriNetwork::new(
-            vec![1, 0],
-            vec![Default::default(); 2],
-            vec![PetriTransition::new(vec![0], vec![1], vec![])],
-        );
-
-        let simulator = RecursiveBrancher::init(&network);
-
-        assert_eq!(
-            simulator
-                .get_next_states(&network.nodes())
-                .into_iter()
-                .collect::<Vec<_>>(),
-            vec![vec![0, 1]]
-        );
-
-        assert_eq!(
-            network.generate_graph::<RecursiveBrancher>(),
-            PetriGraph::from([(vec![1, 0], [vec![0, 1]]), (vec![0, 1], [vec![0, 1]]),])
-        );
     }
 
     #[test]
@@ -671,25 +469,20 @@ mod test {
         graph2.calculate_reverse();
         let reverse2 = graph2.reverse.borrow().clone().unwrap();
 
-        let graph_union = graph1.union(graph2);
+        let graph_union = graph1.union(&graph2);
 
         assert!(graph_union.reverse.borrow().is_some());
 
         let reverse1 = graph1.reverse.borrow();
+        let reverse1 = reverse1.as_ref().unwrap();
         let reverse_union = graph_union.reverse.borrow();
         let reverse_union = reverse_union.as_ref().unwrap();
 
         // Test that G1^T ⊂ (G1 ∪ G2)^T
-        for (from, to) in reverse1.as_ref().unwrap() {
-            assert!(reverse_union.get(from).is_some());
-            assert!(reverse_union[from].is_subset(to));
-        }
+        assert!(reverse1.is_subgraph(&reverse_union));
 
         // Test that G2^T ⊂ (G1 ∪ G2)^T
-        for (from, to) in &reverse2 {
-            assert!(reverse_union.get(from).is_some());
-            assert!(reverse_union[from].is_subset(to));
-        }
+        assert!(reverse2.is_subgraph(&reverse_union));
     }
 
     #[test]
@@ -749,12 +542,15 @@ mod test {
 
         assert_eq!(
             graph,
-            PetriGraph::from([
-                (vec![1, 0, 0, 0], vec![vec![0, 1, 0, 0]]),
-                (vec![0, 1, 0, 0], vec![vec![0, 0, 1, 0], vec![0, 0, 0, 1]]),
-                (vec![0, 0, 1, 0], vec![vec![0, 0, 1, 0]]),
-                (vec![0, 0, 0, 1], vec![vec![0, 0, 0, 1]]),
-            ])
+            PetriGraph::new(EdgeMap::new(HashMap::from([
+                (vec![1, 0, 0, 0], HashMap::from([(vec![0, 1, 0, 0], ())])),
+                (
+                    vec![0, 1, 0, 0],
+                    HashMap::from([(vec![0, 0, 1, 0], ()), (vec![0, 0, 0, 1], ())])
+                ),
+                (vec![0, 0, 1, 0], HashMap::from([(vec![0, 0, 1, 0], ())])),
+                (vec![0, 0, 0, 1], HashMap::from([(vec![0, 0, 0, 1], ())])),
+            ])))
         );
     }
 }

@@ -1,6 +1,6 @@
-use crate::graph::PetriGraph;
+use crate::graph::{EdgeMap, PetriGraph};
 use crate::simulator::Simulator;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 pub mod data;
 use data::PetriNodeData;
@@ -214,27 +214,20 @@ impl PetriNetwork {
     }
 
     pub fn generate_graph<'b, S: Simulator<'b>>(&'b self) -> PetriGraph {
-        let mut map: HashMap<Vec<u8>, HashSet<Vec<u8>>> = HashMap::new();
+        let mut map: EdgeMap<()> = EdgeMap::default();
         let simulator = S::init(self);
 
         let mut stack = vec![self.nodes.clone()];
         while let Some(current_node) = stack.pop() {
-            if map.get(&current_node).is_none() {
-                let mut hashset = HashSet::new();
-
+            // TODO: use a separate 'close' set
+            if map.count_of(&current_node) == 0 {
                 let next_states = simulator.get_next_states(&current_node);
 
                 for next_state in next_states {
                     stack.push(next_state.clone());
-                    hashset.insert(next_state);
+                    map.add(&current_node, next_state, ());
                 }
-                map.insert(current_node, hashset);
             }
-        }
-
-        // Shrink result hashmap and hashsets
-        for (_, node) in map.iter_mut() {
-            node.shrink_to_fit();
         }
 
         map.shrink_to_fit();
