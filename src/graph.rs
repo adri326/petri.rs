@@ -6,15 +6,11 @@ use std::collections::{HashMap, HashSet};
 use dot_writer::{AttributesList, Node};
 
 use super::network::export_dot;
-// use crate::{
-//     PetriTransition,
-//     PetriNetwork,
-// };
 
 #[derive(Clone)]
 pub struct PetriGraph {
     map: HashMap<Vec<u8>, HashSet<Vec<u8>>>,
-    transpose: RefCell<Option<HashMap<Vec<u8>, HashSet<Vec<u8>>>>>,
+    reverse: RefCell<Option<HashMap<Vec<u8>, HashSet<Vec<u8>>>>>,
 }
 
 /// A graph of states of a petri network. The following notation is used in this document:
@@ -31,7 +27,7 @@ impl PetriGraph {
     pub fn new(map: HashMap<Vec<u8>, HashSet<Vec<u8>>>) -> Self {
         Self {
             map,
-            transpose: RefCell::new(None),
+            reverse: RefCell::new(None),
         }
     }
 
@@ -40,13 +36,13 @@ impl PetriGraph {
     }
 
     #[inline]
-    pub fn with_transpose<F, T>(&self, state: &Vec<u8>, fn_with: F) -> Option<T>
+    pub fn with_reverse<F, T>(&self, state: &Vec<u8>, fn_with: F) -> Option<T>
     where
         F: for<'c> FnOnce(&'c HashSet<Vec<u8>>) -> T,
     {
-        self.calculate_transpose();
+        self.calculate_reverse();
 
-        if let Some(ref inverse) = self.transpose.borrow().as_ref().unwrap().get(state) {
+        if let Some(ref inverse) = self.reverse.borrow().as_ref().unwrap().get(state) {
             Some((fn_with)(inverse))
         } else {
             None
@@ -85,14 +81,23 @@ impl PetriGraph {
 
         map.shrink_to_fit();
 
+        if self.reverse.borrow().is_some() {
+            if let Some(reverse_other) = other.reverse.into_inner() {
+                return Self {
+                    map,
+                    reverse: RefCell::new(Some(self.union_reverse(reverse_other))),
+                };
+            }
+        }
+
         Self {
             map,
-            transpose: RefCell::new(None), // TODO: formally prove that `G = A ∪ B => G^T = A^T ∪ B^T`
+            reverse: RefCell::new(None),
         }
     }
 
-    pub fn calculate_transpose(&self) {
-        if self.transpose.borrow().is_none() {
+    fn calculate_reverse(&self) {
+        if self.reverse.borrow().is_none() {
             let mut res: HashMap<Vec<u8>, HashSet<Vec<u8>>> = HashMap::new();
 
             for (node, next_states) in self.map.iter() {
@@ -108,8 +113,26 @@ impl PetriGraph {
                 }
             }
 
-            *self.transpose.borrow_mut() = Some(res);
+            *self.reverse.borrow_mut() = Some(res);
         }
+    }
+
+    /// Builds the reverse map of the union between self and reverse_other; assumes that self.reverse is not None
+    /// We have (G ∪ H)^T = G^T ∪ H^T, the proof can be found in `proofs/reverse-union.lean`
+    fn union_reverse(&self, reverse_other: HashMap<Vec<u8>, HashSet<Vec<u8>>>) -> HashMap<Vec<u8>, HashSet<Vec<u8>>> {
+        let mut res = self.reverse.borrow().clone().unwrap();
+
+        for (key, value) in reverse_other.into_iter() {
+            if let Some(ref mut existing) = res.get_mut(&key) {
+                for v in value {
+                    existing.insert(v);
+                }
+            } else {
+                res.insert(key, value);
+            }
+        }
+
+        res
     }
 
     /// Returns the greatest set `S ⊂ self` such that `∀ node ∈ S`, `∃ state ∈ self` such that `condition(state)` and `node ->> state`
@@ -134,19 +157,14 @@ impl PetriGraph {
             return hash_set;
         }
 
-        self.calculate_transpose();
+        self.calculate_reverse();
 
-        if let Ok(ref transpose) = self.transpose.try_borrow() {
-            let transpose = transpose.as_ref().expect(
-                "PetriGraph::calculate_transpose did not set PetriGraph::transpose to Some(...)",
+        if let Ok(ref reverse) = self.reverse.try_borrow() {
+            let reverse = reverse.as_ref().expect(
+                "PetriGraph::calculate_reverse did not set PetriGraph::reverse to Some(...)",
             );
             while let Some(current_node) = stack.pop() {
-                for antecedent in transpose
-                    .get(current_node)
-                    .iter()
-                    .map(|x| x.iter())
-                    .flatten()
-                {
+                for antecedent in reverse.get(current_node).iter().map(|x| x.iter()).flatten() {
                     if !hash_set.contains(antecedent) {
                         hash_set.insert(Cow::Owned(antecedent.clone()));
                         stack.push(antecedent);
@@ -215,13 +233,13 @@ impl PetriGraph {
             for node in base.iter() {
                 eprintln!(" - {:?}", node);
             }
-            eprintln!("Info: Set difference (- is missing, * is reaching, ^ is base):");
+            eprintln!("Info: Set difference (# is part of the base set, + is reached, - is not reached):");
             for node in expected.iter() {
                 if actual.contains(node) {
                     if base.contains(node) {
-                        eprintln!(" ^ {:?}", node);
+                        eprintln!(" # {:?}", node);
                     } else {
-                        eprintln!(" * {:?}", node);
+                        eprintln!(" + {:?}", node);
                     }
                 } else {
                     eprintln!(" - {:?}", node);
@@ -269,7 +287,7 @@ impl PetriGraph {
         }
     }
 
-    pub fn final_nodes<'b>(&'b self) -> impl Iterator<Item=&'b Vec<u8>> + 'b {
+    pub fn final_nodes<'b>(&'b self) -> impl Iterator<Item = &'b Vec<u8>> + 'b {
         self.map.iter().filter_map(|(key, values)| {
             if values.len() == 0 || values.len() == 1 && values.contains(key) {
                 Some(key)
@@ -286,7 +304,7 @@ impl PetriGraph {
 
         while let Some(state) = open.pop() {
             if map.contains_key(&state) {
-                continue
+                continue;
             }
 
             let next_states = self.map.get(&state).unwrap();
@@ -298,7 +316,10 @@ impl PetriGraph {
             map.insert(state, next_states.clone());
         }
 
-        PetriGraph { map, transpose: RefCell::new(None) }
+        PetriGraph {
+            map,
+            reverse: RefCell::new(None),
+        }
     }
 
     pub fn export_dot<W: std::io::Write>(
@@ -309,12 +330,7 @@ impl PetriGraph {
     ) {
         let mut writer = dot_writer::DotWriter::from(writer);
 
-        export_dot::export_graph(
-            self,
-            &mut writer,
-            format_node,
-            format_edge,
-        );
+        export_dot::export_graph(self, &mut writer, format_node, format_edge);
     }
 
     pub fn get_dot_string(&self) -> String {
@@ -347,7 +363,7 @@ impl<T: IntoIterator<Item = Vec<u8>>, const N: usize> From<[(Vec<u8>, T); N]> fo
         let iter = iter.into_iter().map(|(k, n)| (k, n.into_iter().collect()));
         Self {
             map: iter.collect(),
-            transpose: RefCell::new(None),
+            reverse: RefCell::new(None),
         }
     }
 }
@@ -357,7 +373,7 @@ impl<T: IntoIterator<Item = Vec<u8>>> FromIterator<(Vec<u8>, T)> for PetriGraph 
         let iter = iter.into_iter().map(|(k, n)| (k, n.into_iter().collect()));
         Self {
             map: iter.collect(),
-            transpose: RefCell::new(None),
+            reverse: RefCell::new(None),
         }
     }
 }
@@ -510,7 +526,7 @@ mod test {
 
         let mut expected = PetriGraph {
             map: HashMap::new(),
-            transpose: RefCell::new(None),
+            reverse: RefCell::new(None),
         };
         expected.map.insert(vec![1, 0], [vec![0, 1]].into());
         expected.map.insert(vec![0, 1], [vec![0, 1]].into()); // Identity
@@ -592,7 +608,7 @@ mod test {
     }
 
     #[test]
-    fn test_graph_transpose() {
+    fn test_graph_reverse() {
         let network = PetriNetwork::new(
             vec![1, 1, 0, 0, 0, 0],
             vec![Default::default(); 6],
@@ -606,22 +622,74 @@ mod test {
 
         let graph = network.generate_graph::<RecursiveBrancher>();
 
-        let mut graph_transpose = network.generate_graph::<RecursiveBrancher>();
-        graph_transpose.calculate_transpose();
+        let mut graph_reverse = network.generate_graph::<RecursiveBrancher>();
+        graph_reverse.calculate_reverse();
 
-        assert!(graph_transpose.transpose.borrow().is_some()); // G^T was filled in
+        assert!(graph_reverse.reverse.borrow().is_some()); // G^T was filled in
 
-        graph_transpose.map = graph_transpose.transpose.borrow().as_ref().unwrap().clone();
-        *graph_transpose.transpose.borrow_mut() = None;
+        graph_reverse.map = graph_reverse.reverse.borrow().as_ref().unwrap().clone();
+        *graph_reverse.reverse.borrow_mut() = None;
 
-        graph_transpose.calculate_transpose();
+        graph_reverse.calculate_reverse();
 
-        let graph_double_transpose = PetriGraph {
-            map: graph_transpose.transpose.borrow().as_ref().unwrap().clone(),
-            transpose: RefCell::new(None),
+        let graph_double_reverse = PetriGraph {
+            map: graph_reverse.reverse.borrow().as_ref().unwrap().clone(),
+            reverse: RefCell::new(None),
         };
 
-        assert_eq!(graph, graph_double_transpose); // G^T^T = G
+        assert_eq!(graph, graph_double_reverse); // G^T^T = G
+    }
+
+    #[test]
+    fn test_graph_union_reverse() {
+        let network1 = PetriNetwork::new(
+            vec![1, 1, 0, 0, 0, 0],
+            vec![Default::default(); 6],
+            vec![
+                PetriTransition::new(vec![0], vec![2], vec![]),
+                PetriTransition::new(vec![1], vec![3], vec![]),
+                PetriTransition::new(vec![3], vec![4], vec![]),
+                PetriTransition::new(vec![2, 4], vec![5], vec![]),
+            ],
+        );
+
+        let network2 = PetriNetwork::new(
+            vec![5, 0, 0, 0, 0, 0],
+            vec![Default::default(); 6],
+            vec![
+                PetriTransition::new(vec![0], vec![1], vec![]),
+                PetriTransition::new(vec![1, 4], vec![2], vec![]),
+                PetriTransition::new(vec![2], vec![3], vec![]),
+                PetriTransition::new(vec![3], vec![4, 5], vec![]),
+            ],
+        );
+
+        let graph1 = network1.generate_graph::<RecursiveBrancher>();
+        let graph2 = network2.generate_graph::<RecursiveBrancher>();
+
+        graph1.calculate_reverse();
+        graph2.calculate_reverse();
+        let reverse2 = graph2.reverse.borrow().clone().unwrap();
+
+        let graph_union = graph1.union(graph2);
+
+        assert!(graph_union.reverse.borrow().is_some());
+
+        let reverse1 = graph1.reverse.borrow();
+        let reverse_union = graph_union.reverse.borrow();
+        let reverse_union = reverse_union.as_ref().unwrap();
+
+        // Test that G1^T ⊂ (G1 ∪ G2)^T
+        for (from, to) in reverse1.as_ref().unwrap() {
+            assert!(reverse_union.get(from).is_some());
+            assert!(reverse_union[from].is_subset(to));
+        }
+
+        // Test that G2^T ⊂ (G1 ∪ G2)^T
+        for (from, to) in &reverse2 {
+            assert!(reverse_union.get(from).is_some());
+            assert!(reverse_union[from].is_subset(to));
+        }
     }
 
     #[test]

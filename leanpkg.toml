@@ -1,0 +1,8 @@
+[package]
+name = "petri-proofs"
+version = "0.1"
+lean_version = "leanprover-community/lean:3.41.0"
+path = "proofs"
+
+[dependencies]
+mathlib = {git = "https://github.com/leanprover-community/mathlib", rev = "fc882ff84d2dd751f2e18dec3daa19ea61a7410b"}
