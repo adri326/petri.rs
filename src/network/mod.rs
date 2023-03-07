@@ -228,7 +228,7 @@ impl PetriNetwork {
                     stack.push(next_state.clone());
                     hashset.insert(next_state);
                 }
-                map.insert(current_node.clone(), hashset);
+                map.insert(current_node, hashset);
             }
         }
 

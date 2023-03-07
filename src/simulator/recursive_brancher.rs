@@ -19,7 +19,7 @@ impl<'a> RecursiveBrancher<'a> {
         skip: usize,
     ) -> Vec<Vec<u8>> {
         for (current_index, &node_index) in self.node_order.iter().enumerate().skip(skip) {
-            if self.network.nodes[node_index] == 0 {
+            if remaining_values[node_index] == 0 {
                 continue;
             }
 
@@ -105,4 +105,76 @@ fn get_node_order(network: &PetriNetwork) -> Vec<usize> {
     order.reverse();
 
     order
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_simple() {
+        let network = PetriNetwork {
+            nodes: vec![0, 1, 0],
+            node_data: vec![Default::default(); 3],
+            transitions: vec![
+                PetriTransition::new(vec![0], vec![1], vec![]),
+                PetriTransition::new(vec![1], vec![2], vec![]),
+            ],
+        };
+
+        let brancher = RecursiveBrancher::init(&network);
+
+        assert_eq!(
+            brancher.get_next_states(&[0, 1, 0]),
+            HashSet::from([vec![0, 0, 1]])
+        );
+    }
+
+    #[test]
+    fn test_two_calls() {
+        let network = PetriNetwork {
+            nodes: vec![1, 0, 0],
+            node_data: vec![Default::default(); 3],
+            transitions: vec![
+                PetriTransition::new(vec![0], vec![1], vec![]),
+                PetriTransition::new(vec![1], vec![2], vec![]),
+            ],
+        };
+
+        let brancher = RecursiveBrancher::init(&network);
+
+        assert_eq!(
+            brancher.get_next_states(&[1, 0, 0]),
+            HashSet::from([vec![0, 1, 0]])
+        );
+
+        assert_eq!(
+            brancher.get_next_states(&[0, 1, 0]),
+            HashSet::from([vec![0, 0, 1]])
+        );
+    }
+
+    #[test]
+    fn test_different_starting_set() {
+        let network = PetriNetwork {
+            nodes: vec![0, 0, 0],
+            node_data: vec![Default::default(); 3],
+            transitions: vec![
+                PetriTransition::new(vec![0], vec![1], vec![]),
+                PetriTransition::new(vec![1], vec![2], vec![]),
+            ],
+        };
+
+        let brancher = RecursiveBrancher::init(&network);
+
+        assert_eq!(
+            brancher.get_next_states(&[1, 0, 0]),
+            HashSet::from([vec![0, 1, 0]])
+        );
+
+        assert_eq!(
+            brancher.get_next_states(&[0, 1, 0]),
+            HashSet::from([vec![0, 0, 1]])
+        );
+    }
 }
