@@ -80,11 +80,11 @@ pub fn export_network(network: &PetriNetwork, writer: &mut DotWriter) {
             }
         }
 
-        for input in transition.inputs.iter() {
+        for input in transition.inputs() {
             digraph.edge(&format!("N{}", input), &name);
         }
 
-        for output in transition.outputs.iter() {
+        for output in transition.outputs() {
             digraph.edge(&name, &format!("N{}", output));
         }
     }

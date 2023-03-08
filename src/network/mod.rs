@@ -1,20 +1,14 @@
 use crate::graph::{EdgeMap, PetriGraph};
 use crate::simulator::Simulator;
-use std::collections::HashMap;
+use std::collections::{HashMap};
 
 pub mod data;
 use data::PetriNodeData;
 
 pub(crate) mod export_dot;
 
-// TODO: reimplement PartialEq
-#[derive(Clone, Debug)]
-pub struct PetriTransition {
-    pub inputs: Vec<usize>,
-    pub outputs: Vec<usize>,
-    pub groups: Vec<String>,
-    pub label: Option<String>,
-}
+mod transition;
+pub use transition::PetriTransition;
 
 /* Invariants:
     nodes.len() > max(max(transitions→inputs), max(transitions→outputs))
@@ -31,71 +25,6 @@ pub struct PetriNetwork {
     pub(crate) node_data: Vec<PetriNodeData>,
     pub(crate) transitions: Vec<PetriTransition>,
 }
-
-impl PetriTransition {
-    pub fn new(inputs: Vec<usize>, outputs: Vec<usize>, groups: Vec<String>) -> Self {
-        Self {
-            inputs,
-            outputs,
-            groups,
-            label: None,
-        }
-    }
-
-    pub fn label(&mut self, label: String) {
-        self.label = Some(label);
-    }
-
-    #[inline]
-    pub fn involves(&self, node: usize) -> bool {
-        for input in self.inputs.iter() {
-            if *input == node {
-                return true;
-            }
-        }
-
-        for output in self.outputs.iter() {
-            if *output == node {
-                return true;
-            }
-        }
-
-        false
-    }
-
-    pub fn is_active(&self, nodes: &[u8]) -> bool {
-        let mut active = true;
-        for &input in self.inputs.iter() {
-            active = active && nodes[input] > 0;
-        }
-        active
-    }
-
-    pub fn apply(&self, state: &mut [u8]) {
-        self.apply_inputs(state);
-        self.apply_outputs(state);
-    }
-
-    pub fn apply_inputs(&self, state: &mut [u8]) {
-        for &input in self.inputs.iter() {
-            state[input] -= 1;
-        }
-    }
-
-    pub fn apply_outputs(&self, state: &mut [u8]) {
-        for &output in self.outputs.iter() {
-            state[output] += 1;
-        }
-    }
-}
-
-impl PartialEq for PetriTransition {
-    fn eq(&self, other: &Self) -> bool {
-        self.inputs == other.inputs && self.outputs == other.outputs
-    }
-}
-
-impl Eq for PetriTransition {}
 
 impl PetriNetwork {
     pub fn new(
@@ -179,10 +108,10 @@ impl PetriNetwork {
                 let res = (callback)(transition);
 
                 let mut max_index = 0;
-                for &input in transition.inputs.iter() {
+                for &input in transition.inputs() {
                     max_index = max_index.max(input);
                 }
-                for &output in transition.outputs.iter() {
+                for &output in transition.outputs() {
                     max_index = max_index.max(output);
                 }
 
@@ -199,10 +128,10 @@ impl PetriNetwork {
 
     pub fn push_transition(&mut self, transition: PetriTransition) {
         let mut max_index = 0;
-        for &input in transition.inputs.iter() {
+        for &input in transition.inputs() {
             max_index = max_index.max(input);
         }
-        for &output in transition.outputs.iter() {
+        for &output in transition.outputs() {
             max_index = max_index.max(output);
         }
 
@@ -238,11 +167,11 @@ impl PetriNetwork {
     fn max_index(&self) -> usize {
         let mut max = 0;
         for transition in self.transitions.iter() {
-            for &input in transition.inputs.iter() {
+            for &input in transition.inputs() {
                 max = max.max(input);
             }
 
-            for &output in transition.outputs.iter() {
+            for &output in transition.outputs() {
                 max = max.max(output);
             }
         }
@@ -267,6 +196,8 @@ impl PetriNetwork {
 
 #[cfg(test)]
 pub(crate) mod test {
+    use std::collections::HashSet;
+
     use crate::simulator::RecursiveBrancher;
 
     use super::*;

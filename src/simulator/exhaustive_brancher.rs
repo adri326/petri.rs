@@ -70,13 +70,13 @@ impl<'a> ExhaustiveBrancher<'a> {
             let mut found_group = false;
             for group in &mut groups {
                 found_group = transition
-                    .inputs
+                    .inputs()
                     .iter()
                     .any(|input| group.nodes.contains(input));
 
                 if found_group {
                     group.transitions.push(transition);
-                    for input in &transition.inputs {
+                    for input in transition.inputs() {
                         group.nodes.insert(*input);
                     }
                     break;
@@ -86,7 +86,7 @@ impl<'a> ExhaustiveBrancher<'a> {
             if !found_group {
                 groups.push(TransitionGroup {
                     transitions: vec![transition],
-                    nodes: transition.inputs.iter().copied().collect(),
+                    nodes: transition.inputs().iter().copied().collect(),
                 });
             }
         }

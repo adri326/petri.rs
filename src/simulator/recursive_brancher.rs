@@ -29,7 +29,7 @@ impl<'a> RecursiveBrancher<'a> {
                 .iter()
                 .enumerate()
                 .filter(|(index, _)| !brownout[*index])
-                .filter(|(_, transition)| transition.inputs.contains(&node_index))
+                .filter(|(_, transition)| transition.inputs().contains(&node_index))
                 .filter(|(_, transition)| transition.is_active(&remaining_values))
                 .collect::<Vec<_>>();
 
@@ -96,7 +96,7 @@ fn get_node_order(network: &PetriNetwork) -> Vec<usize> {
     let mut order = (0..network.nodes.len()).collect::<Vec<_>>();
     let mut weights = vec![0usize; network.nodes.len()];
     for transition in network.transitions.iter() {
-        for input in transition.inputs.iter() {
+        for input in transition.inputs() {
             weights[*input] += 1;
         }
     }
