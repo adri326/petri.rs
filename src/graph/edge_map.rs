@@ -49,6 +49,14 @@ impl<T> EdgeMap<T> {
         }
     }
 
+    pub fn get_edge_attribute<'b>(&'b self, source: &[u8], target: &[u8]) -> Option<&'b T> {
+        if let Some(edges) = self.0.get(source) {
+            edges.get(target)
+        } else {
+            None
+        }
+    }
+
     pub fn iter_edges_of(&self, state: &[u8]) -> impl Iterator<Item = &Vec<u8>> {
         self.0.get(state).into_iter().flat_map(|edges| edges.keys())
     }

@@ -55,6 +55,10 @@ impl<T: Clone> PetriGraph<T> {
             .map(|node| (node, self.map.iter_edges_of(node)))
     }
 
+    pub fn get_edge_attribute<'b>(&'b self, from: &[u8], to: &[u8]) -> Option<&'b T> {
+        self.map.get_edge_attribute(from, to)
+    }
+
     /// Returns the union graph of `self` and `other`, where if `res = self ∪ other`,
     /// `∀ node ∈ self, node ⊂ res[node]` and `∀ node ∈ other, node ⊂ res[node]`
     ///

@@ -36,31 +36,33 @@ fn main() {
     let mut output = std::fs::File::create("target/graph.dot").unwrap();
     graph.export_dot(
         &mut output,
-        |state, node| {
-            node.set("shape", "point", true);
-            node.set("width", "0.2", false);
-            node.set("height", "0.2", false);
+        |state, dot_node| {
+            dot_node.set("shape", "point", true);
+            dot_node.set("width", "0.2", false);
+            dot_node.set("height", "0.2", false);
             let subgraph = graph.subgraph(state);
             if deadlocks.contains(state) {
-                node.set("fillcolor", "red", true);
-                node.set("color", "red", true);
+                dot_node.set("fillcolor", "red", true);
+                dot_node.set("color", "red", true);
             } else if success.contains(state) {
-                node.set("fillcolor", "green", true);
-                node.set("color", "green", true);
+                dot_node.set("fillcolor", "green", true);
+                dot_node.set("color", "green", true);
             } else if subgraph.always_reaches(|node| deadlocks.contains(node)) {
-                node.set("fillcolor", "#f0b0b0", true);
-                node.set("color", "#f0b0b0", true);
+                dot_node.set("fillcolor", "#f0b0b0", true);
+                dot_node.set("color", "#f0b0b0", true);
             } else if subgraph.always_reaches(|node| success.contains(node)) {
-                node.set("fillcolor", "#b0f0b0", true);
-                node.set("color", "#b0f0b0", true);
+                dot_node.set("fillcolor", "#b0f0b0", true);
+                dot_node.set("color", "#b0f0b0", true);
             } else {
-                node.set("fillcolor", "#808080", true);
-                node.set("color", "#808080", true);
+                dot_node.set("fillcolor", "#808080", true);
+                dot_node.set("color", "#808080", true);
             }
         },
-        |from, to, edge| {
+        |from, to, dot_edge| {
+            // let probability = *graph.get_edge_attribute(from, to).unwrap();
+            // dot_edge.set("label", &format!("{}", probability), true);
             if from == to {
-                edge.set("style", "invis", true);
+                dot_edge.set("style", "invis", true);
             }
         },
     );
