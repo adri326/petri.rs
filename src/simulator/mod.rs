@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap};
 
 use crate::*;
 
@@ -14,5 +14,5 @@ pub use exhaustive_brancher::ExhaustiveBrancher;
 pub trait Simulator<'a> {
     fn init(network: &'a PetriNetwork) -> Self;
 
-    fn get_next_states(&self, state: &[u8]) -> HashSet<Vec<u8>>;
+    fn get_next_states(&self, state: &[u8]) -> HashMap<Vec<u8>, f64>;
 }

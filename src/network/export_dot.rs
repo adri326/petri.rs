@@ -90,8 +90,8 @@ pub fn export_network(network: &PetriNetwork, writer: &mut DotWriter) {
     }
 }
 
-pub fn export_graph(
-    graph: &PetriGraph,
+pub fn export_graph<T: Clone>(
+    graph: &PetriGraph<T>,
     writer: &mut DotWriter,
     format_node: impl Fn(&[u8], &mut Node),
     format_edge: impl Fn(&[u8], &[u8], &mut AttributesList),

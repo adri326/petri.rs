@@ -15,9 +15,10 @@ impl<'a> RecursiveBrancher<'a> {
         &self,
         mut remaining_values: Vec<u8>,
         mut current_state: Vec<u8>,
+        mut current_probability: f64,
         mut brownout: Vec<bool>,
         skip: usize,
-    ) -> Vec<Vec<u8>> {
+    ) -> Vec<(Vec<u8>, f64)> {
         for (current_index, &node_index) in self.node_order.iter().enumerate().skip(skip) {
             if remaining_values[node_index] == 0 {
                 continue;
@@ -41,6 +42,7 @@ impl<'a> RecursiveBrancher<'a> {
                     brownout[index] = true;
                     transition.apply_inputs(&mut remaining_values);
                     transition.apply(&mut current_state);
+                    current_probability *= transition.probability;
                 }
                 _ => {
                     // Branch out and call recursive_search recursively,
@@ -52,13 +54,16 @@ impl<'a> RecursiveBrancher<'a> {
                             brownout[index] = true;
                             let mut remaining_values = remaining_values.clone();
                             let mut current_state = current_state.clone();
+                            let mut current_probability = current_probability;
 
                             transition.apply_inputs(&mut remaining_values);
                             transition.apply(&mut current_state);
+                            current_probability *= transition.probability;
 
                             self.recursive_search(
                                 remaining_values,
                                 current_state,
+                                current_probability,
                                 brownout,
                                 current_index,
                             )
@@ -68,7 +73,7 @@ impl<'a> RecursiveBrancher<'a> {
             }
         }
 
-        vec![current_state]
+        vec![(current_state, current_probability)]
     }
 }
 
@@ -80,10 +85,11 @@ impl<'a> Simulator<'a> for RecursiveBrancher<'a> {
         }
     }
 
-    fn get_next_states(&self, state: &[u8]) -> HashSet<Vec<u8>> {
+    fn get_next_states(&self, state: &[u8]) -> HashMap<Vec<u8>, f64> {
         self.recursive_search(
             Vec::from(state),
             Vec::from(state),
+            1.0,
             vec![false; self.network.transitions.len()],
             0,
         )
@@ -126,7 +132,7 @@ mod test {
 
         assert_eq!(
             brancher.get_next_states(&[0, 1, 0]),
-            HashSet::from([vec![0, 0, 1]])
+            HashMap::from([(vec![0, 0, 1], 1.0)])
         );
     }
 
@@ -145,12 +151,12 @@ mod test {
 
         assert_eq!(
             brancher.get_next_states(&[1, 0, 0]),
-            HashSet::from([vec![0, 1, 0]])
+            HashMap::from([(vec![0, 1, 0], 1.0)])
         );
 
         assert_eq!(
             brancher.get_next_states(&[0, 1, 0]),
-            HashSet::from([vec![0, 0, 1]])
+            HashMap::from([(vec![0, 0, 1], 1.0)])
         );
     }
 
@@ -169,12 +175,12 @@ mod test {
 
         assert_eq!(
             brancher.get_next_states(&[1, 0, 0]),
-            HashSet::from([vec![0, 1, 0]])
+            HashMap::from([(vec![0, 1, 0], 1.0)])
         );
 
         assert_eq!(
             brancher.get_next_states(&[0, 1, 0]),
-            HashSet::from([vec![0, 0, 1]])
+            HashMap::from([(vec![0, 0, 1], 1.0)])
         );
     }
 }

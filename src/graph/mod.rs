@@ -10,9 +10,9 @@ mod edge_map;
 pub use edge_map::EdgeMap;
 
 #[derive(Clone)]
-pub struct PetriGraph {
-    map: EdgeMap<()>,
-    reverse: RefCell<Option<EdgeMap<()>>>,
+pub struct PetriGraph<T: Clone> {
+    map: EdgeMap<T>,
+    reverse: RefCell<Option<EdgeMap<T>>>,
 }
 
 /// A graph of states of a petri network. The following notation is used in this document:
@@ -25,8 +25,8 @@ pub struct PetriGraph {
 /// - `G = A ∩ B` is the greatest graph such that `∀ node ∈ C, node ∈ A and node ∈ B` and `∀ node ∈ C, node ⊂ A[node] and node ⊂ B[node]`
 /// - `node_a ->> node_b [G]` if `∃ k_n ∈ ℕ→G, N ∈ ℕ` such that `∀ n < N, k_n -> k_n+1 [G]`, `k_0 = node_a` and `k_N = node_b`.
 ///    In other words, there exists a path from `node_a` to `node_b`.
-impl PetriGraph {
-    pub fn new(map: EdgeMap<()>) -> Self {
+impl<T: Clone> PetriGraph<T> {
+    pub fn new(map: EdgeMap<T>) -> Self {
         Self {
             map,
             reverse: RefCell::new(None),
@@ -34,9 +34,9 @@ impl PetriGraph {
     }
 
     #[inline]
-    pub fn with_reverse<F, T>(&self, fn_with: F) -> T
+    pub fn with_reverse<F, R>(&self, fn_with: F) -> R
     where
-        F: for<'c> FnOnce(&'c EdgeMap<()>) -> T,
+        F: for<'c> FnOnce(&'c EdgeMap<T>) -> R,
     {
         self.calculate_reverse();
 
@@ -231,7 +231,7 @@ impl PetriGraph {
         })
     }
 
-    pub fn subgraph(&self, node: &[u8]) -> PetriGraph {
+    pub fn subgraph(&self, node: &[u8]) -> PetriGraph<T> {
         let mut res = EdgeMap::default();
 
         let mut open = vec![Vec::from(node)];
@@ -289,13 +289,13 @@ impl PetriGraph {
     }
 }
 
-impl PartialEq for PetriGraph {
+impl<T: Clone> PartialEq for PetriGraph<T> {
     fn eq(&self, other: &Self) -> bool {
         self.map == other.map
     }
 }
 
-impl PartialOrd for PetriGraph {
+impl<T: Clone> PartialOrd for PetriGraph<T> {
     /// Tests inclusion between self and `other`: if self is a sub-graph of `other` (ie `∀ node ∈ self`, `node ⊂ other[node]`), then
     /// `Ordering::Less` is returned and vice-versa (with `Ordering::Greater`).
     /// If neither are included in each other, then returns `None` and if both are equal, returns `Ordering::Greater`
@@ -304,7 +304,7 @@ impl PartialOrd for PetriGraph {
     }
 }
 
-impl std::fmt::Debug for PetriGraph {
+impl<T: Clone> std::fmt::Debug for PetriGraph<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "PetriGraph {{")?;
         for node in self.map.iter_nodes() {
@@ -346,16 +346,16 @@ mod test {
 
         let graph = network.generate_graph::<RecursiveBrancher>();
 
-        let mut expected = PetriGraph {
+        let mut expected: PetriGraph<f64> = PetriGraph {
             map: EdgeMap::default(),
             reverse: RefCell::new(None),
         };
-        expected.map.add(&[1, 0], vec![0, 1], ());
-        expected.map.add(&[0, 1], vec![0, 1], ()); // Identity
+        expected.map.add(&[1, 0], vec![0, 1], 1.0);
+        expected.map.add(&[0, 1], vec![0, 1], 1.0); // Identity
 
         assert_eq!(graph, expected);
 
-        expected.map.add(&[0, 0], vec![0, 0], ());
+        expected.map.add(&[0, 0], vec![0, 0], 1.0);
         assert_eq!(graph.partial_cmp(&expected), Some(Ordering::Less));
         assert_eq!(expected.partial_cmp(&graph), Some(Ordering::Greater));
 
@@ -543,13 +543,13 @@ mod test {
         assert_eq!(
             graph,
             PetriGraph::new(EdgeMap::new(HashMap::from([
-                (vec![1, 0, 0, 0], HashMap::from([(vec![0, 1, 0, 0], ())])),
+                (vec![1, 0, 0, 0], HashMap::from([(vec![0, 1, 0, 0], 1.0)])),
                 (
                     vec![0, 1, 0, 0],
-                    HashMap::from([(vec![0, 0, 1, 0], ()), (vec![0, 0, 0, 1], ())])
+                    HashMap::from([(vec![0, 0, 1, 0], 1.0), (vec![0, 0, 0, 1], 1.0)])
                 ),
-                (vec![0, 0, 1, 0], HashMap::from([(vec![0, 0, 1, 0], ())])),
-                (vec![0, 0, 0, 1], HashMap::from([(vec![0, 0, 0, 1], ())])),
+                (vec![0, 0, 1, 0], HashMap::from([(vec![0, 0, 1, 0], 1.0)])),
+                (vec![0, 0, 0, 1], HashMap::from([(vec![0, 0, 0, 1], 1.0)])),
             ])))
         );
     }

@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 
 use crate::*;
 
@@ -26,34 +26,36 @@ impl<'a> Simulator<'a> for ExhaustiveBrancher<'a> {
         Self { network }
     }
 
-    fn get_next_states(&self, state: &[u8]) -> HashSet<Vec<u8>> {
+    fn get_next_states(&self, state: &[u8]) -> HashMap<Vec<u8>, f64> {
         let groups = self.group_active_transitions(state);
         let groups = groups
             .iter()
             .map(|group| group.resolve(state))
             .collect::<Vec<_>>();
 
-        self.recurse(&groups, Vec::from(state))
+        self.recurse(&groups, Vec::from(state), 1.0)
     }
 }
 
 impl<'a> ExhaustiveBrancher<'a> {
-    fn recurse(&self, groups: &[ResolvedTransitionGroup], state: Vec<u8>) -> HashSet<Vec<u8>> {
-        let mut res = HashSet::new();
+    fn recurse(&self, groups: &[ResolvedTransitionGroup], state: Vec<u8>, current_probability: f64) -> HashMap<Vec<u8>, f64> {
+        let mut res = HashMap::new();
 
         if groups.len() == 0 {
-            res.insert(state);
+            res.insert(state, current_probability);
             return res;
         }
 
         for transitions in &groups[0].0 {
             let mut new_state = state.clone();
+            let mut current_probability = current_probability;
 
             for transition in transitions {
                 transition.apply(&mut new_state);
+                current_probability *= transition.probability;
             }
 
-            res.extend(self.recurse(&groups[1..], new_state));
+            res.extend(self.recurse(&groups[1..], new_state, current_probability));
         }
 
         res

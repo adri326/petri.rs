@@ -142,8 +142,8 @@ impl PetriNetwork {
         self.transitions.push(transition);
     }
 
-    pub fn generate_graph<'b, S: Simulator<'b>>(&'b self) -> PetriGraph {
-        let mut map: EdgeMap<()> = EdgeMap::default();
+    pub fn generate_graph<'b, S: Simulator<'b>>(&'b self) -> PetriGraph<f64> {
+        let mut map: EdgeMap<f64> = EdgeMap::default();
         let simulator = S::init(self);
 
         let mut stack = vec![self.nodes.clone()];
@@ -152,9 +152,17 @@ impl PetriNetwork {
             if map.count_of(&current_node) == 0 {
                 let next_states = simulator.get_next_states(&current_node);
 
-                for next_state in next_states {
+                let total_probability: f64 = next_states.values().sum();
+
+                for (next_state, probability) in next_states {
+                    let probability = if total_probability == 0.0 {
+                        1.0
+                    } else {
+                        probability / total_probability
+                    };
+
                     stack.push(next_state.clone());
-                    map.add(&current_node, next_state, ());
+                    map.add(&current_node, next_state, probability);
                 }
             }
         }
@@ -196,8 +204,6 @@ impl PetriNetwork {
 
 #[cfg(test)]
 pub(crate) mod test {
-    use std::collections::HashSet;
-
     use crate::simulator::RecursiveBrancher;
 
     use super::*;
@@ -206,7 +212,7 @@ pub(crate) mod test {
         let simulator = RecursiveBrancher::init(network);
         assert_eq!(
             simulator.get_next_states(&network.nodes),
-            expected.into_iter().collect::<HashSet<_>>()
+            expected.into_iter().map(|x| (x, 1.0)).collect::<HashMap<_, _>>()
         );
     }
 
