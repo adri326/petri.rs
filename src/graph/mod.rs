@@ -1,6 +1,6 @@
-use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::HashSet;
+use std::{cell::RefCell, collections::HashMap};
 
 use dot_writer::{AttributesList, Node};
 
@@ -8,6 +8,9 @@ use super::network::export_dot;
 
 mod edge_map;
 pub use edge_map::EdgeMap;
+
+mod standing_distribution;
+pub use standing_distribution::Settings as MonteCarloSettings;
 
 #[derive(Clone)]
 pub struct PetriGraph<T: Clone> {
@@ -257,6 +260,30 @@ impl<T: Clone> PetriGraph<T> {
         }
     }
 
+    pub fn wrap_final_nodes(&self, starting_node: &[u8], transition_attribute: T) -> PetriGraph<T>
+    where
+        T: Clone,
+    {
+        let mut res = self.map.clone();
+
+        for node in self.map.iter_nodes() {
+            let count = res.count_of(node);
+            if count == 0 {
+                res.add(node, starting_node.to_vec(), transition_attribute.clone());
+            } else if count == 1 {
+                if res.iter_edges_of(node).next() == Some(node) {
+                    res.remove(node, node);
+                    res.add(node, starting_node.to_vec(), transition_attribute.clone());
+                }
+            }
+        }
+
+        PetriGraph {
+            map: res,
+            reverse: RefCell::new(None),
+        }
+    }
+
     pub fn export_dot<W: std::io::Write>(
         &self,
         writer: &mut W,
@@ -267,29 +294,15 @@ impl<T: Clone> PetriGraph<T> {
 
         export_dot::export_graph(self, &mut writer, format_node, format_edge);
     }
+}
 
-    pub fn get_dot_string(&self) -> String {
-        use dot_writer::Attributes;
-
-        let mut vec = Vec::new();
-        let mut writer = dot_writer::DotWriter::from(&mut vec);
-
-        export_dot::export_graph(
-            self,
-            &mut writer,
-            |state, node| {
-                let mut label = String::new();
-                for (_i, &x) in state.iter().enumerate() {
-                    if x > 0 {
-                        label += &format!("{},", _i);
-                    }
-                }
-                node.set_label(&label[0..(label.len() - 1)]);
-            },
-            |_, _, _| {},
-        );
-
-        String::from_utf8_lossy(&vec).into_owned()
+impl PetriGraph<f64> {
+    pub fn get_standing_distribution(
+        &self,
+        initial_state: &[u8],
+        settings: MonteCarloSettings,
+    ) -> HashMap<Vec<u8>, f64> {
+        standing_distribution::monte_carlo(&self.map, initial_state, settings)
     }
 }
 

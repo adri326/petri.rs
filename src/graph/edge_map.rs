@@ -57,6 +57,10 @@ impl<T> EdgeMap<T> {
         }
     }
 
+    pub fn get_edges_of<'b>(&'b self, source: &[u8]) -> Option<&'b HashMap<Vec<u8>, T>> {
+        self.0.get(source)
+    }
+
     pub fn iter_edges_of(&self, state: &[u8]) -> impl Iterator<Item = &Vec<u8>> {
         self.0.get(state).into_iter().flat_map(|edges| edges.keys())
     }

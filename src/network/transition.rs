@@ -20,7 +20,7 @@ impl PetriTransition {
             outputs: outputs.into_iter().collect(),
             groups,
             label: None,
-            probability: 1.0
+            probability: 1.0,
         }
     }
 

@@ -1,5 +1,6 @@
 mod graph;
 pub use graph::PetriGraph;
+pub use graph::MonteCarloSettings;
 
 mod network;
 pub use network::{data::PetriNodeData, PetriNetwork, PetriTransition};

@@ -1,4 +1,4 @@
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
 
 use crate::*;
 
@@ -38,7 +38,12 @@ impl<'a> Simulator<'a> for ExhaustiveBrancher<'a> {
 }
 
 impl<'a> ExhaustiveBrancher<'a> {
-    fn recurse(&self, groups: &[ResolvedTransitionGroup], state: Vec<u8>, current_probability: f64) -> HashMap<Vec<u8>, f64> {
+    fn recurse(
+        &self,
+        groups: &[ResolvedTransitionGroup],
+        state: Vec<u8>,
+        current_probability: f64,
+    ) -> HashMap<Vec<u8>, f64> {
         let mut res = HashMap::new();
 
         if groups.len() == 0 {

@@ -1,6 +1,6 @@
 use crate::graph::{EdgeMap, PetriGraph};
 use crate::simulator::Simulator;
-use std::collections::{HashMap};
+use std::collections::HashMap;
 
 pub mod data;
 use data::PetriNodeData;
@@ -212,7 +212,10 @@ pub(crate) mod test {
         let simulator = RecursiveBrancher::init(network);
         assert_eq!(
             simulator.get_next_states(&network.nodes),
-            expected.into_iter().map(|x| (x, 1.0)).collect::<HashMap<_, _>>()
+            expected
+                .into_iter()
+                .map(|x| (x, 1.0))
+                .collect::<HashMap<_, _>>()
         );
     }
 
